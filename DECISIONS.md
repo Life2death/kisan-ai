@@ -12,6 +12,18 @@ Format:
 
 ---
 
+- **2026-04-17 — Module 11: DPDPA Consent Flow + Right-to-Erasure**
+  - Chose: Explicit opt-in via "हो" + 30-day erasure window + immutable ConsentEvent audit trail
+  - Runner-up: Implicit consent on first message; immediate hard-delete on STOP
+  - Why: DPDPA v2023 compliance requires explicit consent + right to be forgotten with notice period. 30-day window allows farmer reconsideration; audit trail (ConsentEvent) never deleted for regulatory compliance
+  - Trade-off accepted: Extra DB table (ConsentEvent) + soft-delete pattern (deleted_at) vs immediate deletion. Mitigated by indexed queries that filter soft-deleted records efficiently
+  - Implementation: 
+    - Database: farmers.erasure_requested_at (timestamp), broadcast_log.deleted_at, conversation.deleted_at (soft-delete support)
+    - Handler: _log_consent_event() logs opt_in/opt_out/erasure_request events; _transition_delete_confirm() sets erasure_requested_at + soft-deletes broadcasts
+    - Scheduler: hard_delete_erased_farmers() Celery task runs daily at 1:00 AM IST, hard-deletes farmers > 30 days old, logs erasure_complete before deletion
+    - Privacy: Farmers in erasure window excluded from daily broadcasts + DAU calculations
+  - Evaluation: Compliance with DPDPA v2023 + State Bank of India privacy precedent
+
 - **2026-04-17 — Scope Change: Target Districts + Commodities**
   - Changed districts from Latur/Nanded/Jalna/Akola/Washim → **Pune, Ahilyanagar, Navi Mumbai, Mumbai, Nashik**
   - Changed commodities from soyabean/tur/cotton only → **ALL commodities** (no filter at ingestion, filter at query time)

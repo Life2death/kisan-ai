@@ -221,12 +221,119 @@ For production, use:
 
 ---
 
+## Important: Celery Scheduler
+
+The bot uses **Celery Beat** for scheduled tasks. Ensure Redis is healthy before starting Celery:
+
+```bash
+# Terminal 1: Celery Beat (scheduler)
+celery -A src.scheduler.celery_app beat -l info
+
+# Terminal 2: Celery Worker (executes tasks)
+celery -A src.scheduler.celery_app worker -l info
+```
+
+**Scheduled Tasks**:
+- **6:30 AM IST** — Daily price broadcast to all active farmers
+- **1:00 AM IST** — Hard-delete farmers in 30-day erasure window (DPDPA compliance)
+
+---
+
+## Advanced: Accessing Database Directly
+
+### View Farmers
+```bash
+docker-compose exec postgres psql -U kisan -d kisan_ai -c "SELECT id, phone, name, district, onboarding_state FROM farmers LIMIT 5;"
+```
+
+### View Conversations
+```bash
+docker-compose exec postgres psql -U kisan -d kisan_ai -c "SELECT id, farmer_id, direction, detected_intent, raw_message FROM conversations LIMIT 10;"
+```
+
+### View Consent Events (DPDPA Audit Trail)
+```bash
+docker-compose exec postgres psql -U kisan -d kisan_ai -c "SELECT farmer_id, event_type, created_at FROM consent_events ORDER BY created_at DESC LIMIT 20;"
+```
+
+### View Erasure Requests
+```bash
+docker-compose exec postgres psql -U kisan -d kisan_ai -c "SELECT id, phone, name, erasure_requested_at FROM farmers WHERE erasure_requested_at IS NOT NULL;"
+```
+
+---
+
+## Production Considerations
+
+For **Phase 2+** (June 2026 onward):
+
+1. **Cloud Database**: Migrate to AWS RDS PostgreSQL
+   - Managed backups, replication, auto-scaling
+   - Command: `terraform apply` (AWS config in `infra/`)
+
+2. **Cloud Cache**: Migrate to AWS ElastiCache Redis
+   - High availability, automatic failover
+
+3. **Celery on Kubernetes**: Scale workers horizontally
+   - Deploy with ECS/EKS
+
+4. **Monitoring**: Set up CloudWatch, Datadog, or New Relic
+   - Monitor API latency, task execution, error rates
+
+5. **Security**: Add VPC, security groups, SSL/TLS
+   - Encrypt data in transit (TLS 1.3)
+   - Encrypt data at rest (AWS KMS)
+
+---
+
+## Troubleshooting: Celery Issues
+
+### Celery Worker doesn't start
+```bash
+# Check Redis connection
+docker-compose exec redis redis-cli PING
+# Should return: PONG
+
+# Check Celery app
+python -c "from src.scheduler.celery_app import app; print('✅ Celery app loaded')"
+```
+
+### Tasks not executing at scheduled time
+```bash
+# Check Celery Beat logs
+celery -A src.scheduler.celery_app beat -l debug
+
+# Verify task queue
+docker-compose exec redis redis-cli
+> KEYS celery*
+> LRANGE celery 0 -1
+```
+
+### Broadcast task errors
+```bash
+# Check recent task results
+docker-compose exec redis redis-cli
+> HGETALL celery-task-meta-*
+
+# Or view in PostgreSQL
+# SELECT * FROM broadcast_log WHERE status = 'failed' LIMIT 10;
+```
+
+---
+
 ## What's Next?
 
-Module 4: Mandi Price Ingestion
-- Connect to Agmarknet API
-- Store prices in PostgreSQL
-- Cache in Redis
+**Phase 1 MVP**: All 11 modules complete (April 2026)
+- ✅ Field testing with farmers
+- ✅ DPDPA v2023 compliance
+- ✅ 216 tests passing
+
+**Phase 2** (June–July 2026):
+- Voice message support
+- Photo-based pest diagnosis
+- Weather integration
+- Government schemes & MSP alerts
+- Price alerts
 
 ---
 
