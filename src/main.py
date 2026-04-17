@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import json
 
-from src.adapters.whatsapp import WhatsAppAdapter, WhatsAppConfig, init_adapter
+from src.adapters.whatsapp import WhatsAppAdapter, WhatsAppConfig, init_adapter, get_adapter
 
 # Configure logging
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -127,11 +127,34 @@ async def receive_message(request: Request):
 
         # Process each message
         for msg in messages:
-            if not msg.is_text() or not msg.text:
-                logger.info(f"⚠️  Non-text message from {msg.from_phone}, skipping")
+            # Get WhatsApp adapter for media URL retrieval
+            whatsapp = get_adapter()
+            if not whatsapp:
+                logger.error("WhatsApp adapter not initialized")
                 continue
 
-            logger.info(f"📱 Message from {msg.from_phone}: {msg.text}")
+            # Handle audio messages: get media URL for transcription
+            if msg.is_audio():
+                if msg.media_id:
+                    try:
+                        media_url = await whatsapp.get_media_url(msg.media_id)
+                        msg.media_url = media_url
+                        logger.info(f"✅ Got media URL for audio message from {msg.from_phone}")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to get media URL: {e}")
+                        # Continue anyway - handle_message() will handle the error
+                else:
+                    logger.error(f"⚠️  Audio message missing media_id from {msg.from_phone}")
+                    continue
+
+            # Skip non-text, non-audio messages
+            if not msg.is_text() and not msg.is_audio():
+                logger.info(f"⚠️  Unsupported message type '{msg.message_type}' from {msg.from_phone}, skipping")
+                continue
+
+            # Log message preview (text or "Voice message" for audio)
+            msg_preview = msg.text if msg.text else "Voice message"
+            logger.info(f"📱 Message from {msg.from_phone}: {msg_preview}")
 
             try:
                 # Classify intent
@@ -144,7 +167,6 @@ async def receive_message(request: Request):
 
                 # Route based on intent
                 async with async_session() as session:
-                    whatsapp = WhatsAppAdapter()
 
                     # Weather query (Phase 2)
                     if intent_type == Intent.WEATHER_QUERY:

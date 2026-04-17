@@ -31,6 +31,10 @@ tenacity==9.0.0
 # LLM fallback
 google-generativeai==0.8.3
 
+# Speech-to-Text (Phase 2 Module 2 — voice messages)
+google-cloud-speech==2.23.0
+# openai library (for Whisper fallback, optional)
+
 # Testing
 pytest==8.3.4
 pytest-asyncio==0.24.0

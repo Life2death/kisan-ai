@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # Weather APIs (Phase 2)
     openweather_api_key: str = ""  # OpenWeather API key (https://openweathermap.org)
 
+    # Voice Message STT APIs (Phase 2 Module 2)
+    google_speech_api_key: str = ""  # Google Cloud Speech-to-Text API key (https://cloud.google.com/speech-to-text)
+    google_speech_language_code: str = "mr-IN"  # Marathi (India) language code
+    voice_transcription_timeout: int = 30  # Max seconds per transcription request
+    openai_api_key: str = ""  # OpenAI API key (for Whisper fallback)
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
