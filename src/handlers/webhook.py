@@ -38,6 +38,10 @@ class IncomingMessage:
         """Check if this is an audio message."""
         return self.message_type == "audio"
 
+    def is_image(self) -> bool:
+        """Check if this is an image message (photo for diagnosis)."""
+        return self.message_type == "image"
+
     def is_marathi(self) -> bool:
         """Check if message contains Marathi/Devanagari script (U+0900–U+097F)."""
         if not self.text:
@@ -147,10 +151,30 @@ async def handle_message(message: IncomingMessage) -> Dict[str, Any]:
                 "error": str(e),
             }
 
+    # Phase 2 Module 3: Handle image messages for pest diagnosis
+    if message.is_image():
+        if not message.media_url:
+            logger.error("handle_message: image message missing media_url")
+            return {
+                "status": "image_error",
+                "message_id": message.message_id,
+                "intent": Intent.PEST_QUERY.value,
+                "error": "Missing media URL for image diagnosis",
+            }
+
+        logger.info(f"✅ Image message received, routing to pest diagnosis")
+        return {
+            "status": "image_ready",
+            "message_id": message.message_id,
+            "intent": Intent.PEST_QUERY.value,
+            "confidence": 1.0,
+            "source": "image",
+        }
+
     # Regular text messages or transcribed audio
     if not message.is_text() or not message.text:
-        # Non-audio, non-text messages (images, documents, etc.)
-        logger.info(f"⚠️  Non-text, non-audio message type: {message.message_type}")
+        # Non-audio, non-text, non-image messages (documents, location, etc.)
+        logger.info(f"⚠️  Non-text, non-audio, non-image message type: {message.message_type}")
         return {
             "status": "non_text",
             "message_id": message.message_id,

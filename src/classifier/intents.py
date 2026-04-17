@@ -6,6 +6,8 @@ the LLM when regex returns UNKNOWN.
 
 Intent taxonomy:
   PRICE_QUERY        — farmer wants today's mandi price for a commodity
+  WEATHER_QUERY      — farmer wants weather forecast / conditions (Phase 2 Module 1)
+  PEST_QUERY         — farmer uploads image for pest/disease diagnosis (Phase 2 Module 3)
   SUBSCRIBE          — farmer wants daily broadcast at 6:30 AM
   UNSUBSCRIBE        — farmer wants to stop receiving broadcasts
   ONBOARDING         — new farmer, or asking "how does this work"
@@ -26,7 +28,8 @@ from typing import Optional
 
 class Intent(str, Enum):
     PRICE_QUERY = "price_query"
-    WEATHER_QUERY = "weather_query"  # Phase 2: weather forecast queries
+    WEATHER_QUERY = "weather_query"  # Phase 2 Module 1: weather forecast queries
+    PEST_QUERY = "pest_query"  # Phase 2 Module 3: image-based pest diagnosis
     SUBSCRIBE = "subscribe"
     UNSUBSCRIBE = "unsubscribe"
     ONBOARDING = "onboarding"

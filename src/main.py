@@ -14,6 +14,7 @@ from pydantic import BaseModel
 import json
 
 from src.adapters.whatsapp import WhatsAppAdapter, WhatsAppConfig, init_adapter, get_adapter
+from src.config import settings
 
 # Configure logging
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -133,27 +134,35 @@ async def receive_message(request: Request):
                 logger.error("WhatsApp adapter not initialized")
                 continue
 
-            # Handle audio messages: get media URL for transcription
-            if msg.is_audio():
+            # Handle audio and image messages: get media URL for transcription/diagnosis
+            if msg.is_audio() or msg.is_image():
                 if msg.media_id:
                     try:
                         media_url = await whatsapp.get_media_url(msg.media_id)
                         msg.media_url = media_url
-                        logger.info(f"✅ Got media URL for audio message from {msg.from_phone}")
+                        msg_type_label = "audio" if msg.is_audio() else "image"
+                        logger.info(f"✅ Got media URL for {msg_type_label} message from {msg.from_phone}")
                     except Exception as e:
                         logger.error(f"❌ Failed to get media URL: {e}")
                         # Continue anyway - handle_message() will handle the error
                 else:
-                    logger.error(f"⚠️  Audio message missing media_id from {msg.from_phone}")
+                    logger.error(f"⚠️  {msg.message_type} message missing media_id from {msg.from_phone}")
                     continue
 
-            # Skip non-text, non-audio messages
-            if not msg.is_text() and not msg.is_audio():
+            # Skip non-text, non-audio, non-image messages
+            if not msg.is_text() and not msg.is_audio() and not msg.is_image():
                 logger.info(f"⚠️  Unsupported message type '{msg.message_type}' from {msg.from_phone}, skipping")
                 continue
 
-            # Log message preview (text or "Voice message" for audio)
-            msg_preview = msg.text if msg.text else "Voice message"
+            # Log message preview (text, voice message, or image)
+            if msg.text:
+                msg_preview = msg.text
+            elif msg.is_audio():
+                msg_preview = "Voice message"
+            elif msg.is_image():
+                msg_preview = "Image message"
+            else:
+                msg_preview = msg.message_type
             logger.info(f"📱 Message from {msg.from_phone}: {msg_preview}")
 
             try:
@@ -168,7 +177,7 @@ async def receive_message(request: Request):
                 # Route based on intent
                 async with async_session() as session:
 
-                    # Weather query (Phase 2)
+                    # Weather query (Phase 2 Module 1)
                     if intent_type == Intent.WEATHER_QUERY:
                         handler = WeatherHandler(session)
                         # For now, assume farmer's default district
@@ -180,6 +189,30 @@ async def receive_message(request: Request):
                         )
                         await whatsapp.send_text_message(msg.from_phone, reply)
                         logger.info(f"✅ Sent weather reply to {msg.from_phone}")
+
+                    # Pest diagnosis (Phase 2 Module 3)
+                    elif intent_type == Intent.PEST_QUERY:
+                        from src.diagnosis.handler import DiagnosisHandler
+                        from src.diagnosis.processor import ImageDiagnoser
+
+                        # Initialize diagnoser with config
+                        diagnoser_config = {
+                            "tensorflow_model_path": settings.tensorflow_model_path,
+                            "gemini_vision_enabled": settings.gemini_vision_enabled,
+                            "image_processing_timeout": settings.image_processing_timeout,
+                            "diagnosis_confidence_threshold": settings.diagnosis_confidence_threshold,
+                        }
+                        diagnoser = ImageDiagnoser(diagnoser_config)
+                        handler = DiagnosisHandler(diagnoser)
+
+                        reply = await handler.handle(
+                            result,
+                            media_url=msg.media_url,
+                            farmer_phone=msg.from_phone,
+                            farmer_language="mr",  # TODO: lookup from farmer profile
+                        )
+                        await whatsapp.send_text_message(msg.from_phone, reply)
+                        logger.info(f"✅ Sent diagnosis reply to {msg.from_phone}")
 
                     # Other intents (PRICE_QUERY, SUBSCRIBE, ONBOARDING, etc.)
                     # TODO: Add handlers for these intents
