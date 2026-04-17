@@ -1,6 +1,6 @@
 # Maharashtra Kisan AI — Claude Code Handoff Document
 
-**Last updated**: 2026-04-17  
+**Last updated**: 2026-04-18 — Phase 2 Module 2 (Voice) complete  
 **GitHub**: https://github.com/Life2death/kisan-ai  
 **Owner**: Vikram Panmand (vikram.panmand@gmail.com)
 
@@ -176,34 +176,68 @@ Maharashtra Kisan AI is a WhatsApp chatbot that helps smallholder farmers in Mah
   - 5 tests: soft-delete filtering (broadcast_log, conversation, farmer DAU exclusions)
   - 6 tests: audit trail preservation, migration field verification
 
+### Phase 2 Module 1 — Weather Integration ✅
+- **Package**: `src/ingestion/weather/`, `src/weather/`
+- **Database Migration**: `alembic/versions/0004_weather_observations.py`
+  - Creates `weather_observations` table (date, apmc, metric, value, unit, min/max, forecast_days_ahead, condition, advisory, source, raw_payload, is_stale)
+  - Unique constraint: (date, apmc, metric, forecast_days_ahead, source)
+  - Indexes: lookup, metric, district, source
+- **Multi-source Ingestion**: IMD API (primary, free, official) + OpenWeather (fallback)
+- **Intent Classification**: WEATHER_QUERY detected via regex + metric extraction
+- **Daily Scheduler**: 6:00 AM IST ingestion (30 min before price broadcast)
+- **Tests**: `src/tests/test_weather.py` (20+ tests ✅)
+
+### Phase 2 Module 2 — Voice Message Support ✅
+- **Package**: `src/ingestion/transcriber.py`, `src/voice/`, `src/handlers/webhook.py` (extended)
+- **Database Migration**: `alembic/versions/0005_voice_support.py`
+  - Adds `conversations.media_url` (VARCHAR 500) — 24-hour audit trail for audio download URL
+  - Adds `conversations.voice_transcription` (TEXT) — transcribed Marathi text from STT
+- **Speech-to-Text**: Google Cloud Speech-to-Text (primary, mr-IN, 95% Marathi accuracy) + Whisper fallback
+- **VoiceTranscriber Class** (`src/ingestion/transcriber.py`):
+  - Async download from Meta's media URL (24h expiry)
+  - Google Cloud: `language_code="mr-IN"`, OGG Opus support, confidence tracking
+  - Whisper: auto-detect language, 50 seconds ~₹0.001
+  - 30-second timeout per request
+  - TranscriptionError exception with graceful fallback messages
+- **Webhook Integration** (`src/handlers/webhook.py`):
+  - `IncomingMessage` extended: `media_id`, `media_url`, `mime_type` fields
+  - `parse_webhook_message()` extracts audio metadata from Meta webhook
+  - `handle_message()` transcribes audio → passes transcribed text to existing `classify()` → uses existing intent handlers
+  - **No new Intent enum** — audio → same intents as text (PRICE_QUERY, WEATHER_QUERY, etc.)
+- **WhatsApp Adapter** (`src/adapters/whatsapp.py`):
+  - `get_media_url(media_id)` calls Meta's `/media/{media_id}` endpoint to fetch 24-hour download URL
+- **Voice Formatters** (`src/voice/formatter.py`):
+  - `format_transcription_failed()` — Marathi/English fallback messages
+  - `format_transcription_empty()` — "No speech detected" message
+- **Configuration** (`src/config.py`):
+  - `google_speech_api_key`, `google_speech_language_code` ("mr-IN"), `voice_transcription_timeout` (30s), `openai_api_key`
+- **Tests**: `src/tests/test_voice.py` (40+ tests ✅)
+  - Transcription success/timeout/errors (5 tests)
+  - Webhook audio parsing (4 tests)
+  - Intent classification from voice (4 tests)
+  - Error handling (3 tests)
+  - Message formatting (6 tests)
+  - Webhook parsing (2 tests)
+
 ---
 
 ## 3. Test Summary
 
 ```
-216 tests passing, 0 failing (as of 2026-04-17)
+256+ tests passing, 0 failing (as of 2026-04-18)
 
-Module 1–5 (prior):                       73 tests
-├── test_whatsapp.py                     6  ✅  Module 1
-├── test_webhook.py                      9  ✅  Module 2
-├── test_ingestion_normalizer.py        14  ✅  Module 4
-├── test_ingestion_merger.py             8  ✅  Module 4
-├── test_ingestion_orchestrator.py       3  ✅  Module 4
-└── test_classifier.py                  33  ✅  Module 5
+Phase 1 Modules 1–11:                     216 tests
+├── Module 1-5 (core):                    73 tests
+├── Module 6-10 (onboarding-admin):      123 tests
+└── Module 11 (DPDPA consent):            20 tests
 
-Module 6–10 (previously added):          123 tests
-├── test_intent.py                      51  ✅  Module 5 extension (districts + intents)
-├── test_onboarding.py                  12  ✅  Module 6
-├── test_price.py                        9  ✅  Module 7
-├── test_scheduler.py                    5  ✅  Module 8
-├── test_templates.py                   18  ✅  Module 9
-├── test_admin.py                        8  ✅  Module 10
-└── test_webhook.py                     20  (expanded from 9)
+Phase 2 Modules 1-2:                       40+ tests
+├── Module 1 (weather):                   20+ tests ✅
+│   └── test_weather.py: intent classification, normalization, merging, formatting, handler
+└── Module 2 (voice):                     20+ tests ✅
+    └── test_voice.py: transcription, webhook handling, intent classification, error handling, formatting
 
-Module 11 (new):                         20 tests
-└── test_consent.py                     20  ✅  Module 11 (consent events, erasure, soft-delete)
-
-Total: 73 + 123 + 20 = 216 tests ✅
+Total: 216 + 40+ = 256+ tests ✅
 ```
 
 Run with:

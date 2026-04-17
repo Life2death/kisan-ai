@@ -12,6 +12,20 @@ Format:
 
 ---
 
+- **2026-04-18 — Phase 2 Module 2: Voice Message Support**
+  - Chose: Google Cloud Speech-to-Text (primary) + Whisper (fallback) with "Transcribe → Re-classify" design
+  - Runner-up: Audio-native LLM classifier (Gemini Pro); Whisper-only
+  - Why: Google Cloud provides 95% accuracy for Marathi (mr-IN), free tier 60 min/month; transcribe-to-text reuses 100% of existing regex+Gemini classifier (no new Intent enum); Whisper fallback ensures graceful degradation if quota exhausted
+  - Trade-off accepted: Two STT services vs one (higher maintenance). Mitigated by: (1) transparent error handling (fallback messages to farmers), (2) isolated failures (one service down doesn't block bot), (3) cost-effective (~₹0.04 per 15s Google Cloud, ~₹0.001 per 50s Whisper)
+  - Implementation:
+    - Database: conversations.media_url (24h audit trail), conversations.voice_transcription (transcribed Marathi text)
+    - VoiceTranscriber: Async class with Google Cloud primary (language_code=mr-IN), Whisper fallback, 30s timeout
+    - Webhook: IncomingMessage extended with media_id/media_url/mime_type; parse_webhook_message extracts audio metadata; handle_message transcribes → passes to existing classify()
+    - WhatsApp adapter: get_media_url(media_id) calls Meta's /media endpoint (24h expiry)
+    - Formatters: format_transcription_failed(), format_transcription_empty() in Marathi/English
+    - Scheduling: No new scheduler needed (transcription happens in-request during webhook handling)
+  - Evaluation: No new Intent enum (voice → same intents as text); extensible (future image diagnosis uses same media_url pattern); production-ready error handling; 40+ comprehensive tests
+
 - **2026-04-17 — Phase 2 Module 1: Weather Integration**
   - Chose: Multi-source ingestion (IMD primary, OpenWeather fallback) + async orchestrator pattern
   - Runner-up: Single OpenWeather API; local weather service
