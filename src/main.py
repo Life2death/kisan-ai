@@ -245,26 +245,38 @@ async def receive_message(request: Request):
                     # Price alert subscription
                     elif intent_type == Intent.PRICE_ALERT:
                         from src.price.alert_handler import PriceAlertHandler
+                        from src.price.threshold_parser import parse_alert_message
 
                         if not farmer:
                             reply = "❌ कृपया आधी नोंदणी पूर्ण करा.\n(Please complete onboarding first.)"
                             await whatsapp.send_text_message(msg.from_phone, reply)
                             logger.info(f"Price alert requested but farmer not onboarded: {msg.from_phone}")
                         else:
-                            alert_handler = PriceAlertHandler(session)
-                            farmer_language = farmer.preferred_language or "mr"
-                            # TODO: Extract actual threshold from message (e.g., "₹5,000")
-                            # For now, set a default threshold
-                            reply = await alert_handler.handle_subscription(
-                                farmer_id=str(farmer.id),
-                                commodity=result.get("commodity", ""),
-                                threshold=5000.0,  # TODO: extract from message
-                                condition=">",
-                                district=result.get("district") or farmer.district,
-                                farmer_language=farmer_language,
-                            )
-                            await whatsapp.send_text_message(msg.from_phone, reply)
-                            logger.info(f"✅ Sent price alert confirmation to {msg.from_phone}")
+                            # Extract price threshold from message
+                            threshold, condition = parse_alert_message(msg.text or "")
+
+                            if threshold is None:
+                                # Couldn't parse threshold, ask for clarification
+                                reply = (
+                                    "🔔 कृपया किंमत सूचित करा:\n\n"
+                                    "उदाहरण: 'कांदा ₹4000 से अधिक सूचित करो'\n\n"
+                                    "(Please specify the price threshold)"
+                                )
+                                await whatsapp.send_text_message(msg.from_phone, reply)
+                                logger.info(f"Price alert missing threshold: {msg.from_phone}")
+                            else:
+                                alert_handler = PriceAlertHandler(session)
+                                farmer_language = farmer.preferred_language or "mr"
+                                reply = await alert_handler.handle_subscription(
+                                    farmer_id=str(farmer.id),
+                                    commodity=result.get("commodity", ""),
+                                    threshold=threshold,
+                                    condition=condition,
+                                    district=result.get("district") or farmer.district,
+                                    farmer_language=farmer_language,
+                                )
+                                await whatsapp.send_text_message(msg.from_phone, reply)
+                                logger.info(f"✅ Sent price alert confirmation to {msg.from_phone}")
 
                     # Government scheme query
                     elif intent_type == Intent.SCHEME_QUERY:
@@ -293,23 +305,36 @@ async def receive_message(request: Request):
                     # MSP alert subscription
                     elif intent_type == Intent.MSP_ALERT:
                         from src.scheme.handler import SchemeHandler
+                        from src.price.threshold_parser import parse_alert_message
 
                         if not farmer:
                             reply = "❌ कृपया आधी नोंदणी पूर्ण करा.\n(Please complete onboarding first.)"
                             await whatsapp.send_text_message(msg.from_phone, reply)
                             logger.info(f"MSP alert requested but farmer not onboarded: {msg.from_phone}")
                         else:
-                            scheme_handler = SchemeHandler(session)
-                            farmer_language = farmer.preferred_language or "mr"
-                            # TODO: Extract actual threshold from message (e.g., "₹3,000")
-                            reply = await scheme_handler.handle_msp_alert(
-                                farmer_id=str(farmer.id),
-                                commodity=result.get("commodity", ""),
-                                alert_threshold=3000.0,  # TODO: extract from message
-                                farmer_language=farmer_language,
-                            )
-                            await whatsapp.send_text_message(msg.from_phone, reply)
-                            logger.info(f"✅ Sent MSP alert confirmation to {msg.from_phone}")
+                            # Extract price threshold from message
+                            threshold, condition = parse_alert_message(msg.text or "")
+
+                            if threshold is None:
+                                # Couldn't parse threshold, ask for clarification
+                                reply = (
+                                    "🌾 कृपया न्यूनतम समर्थन मूल्य सूचित करा:\n\n"
+                                    "उदाहरण: 'MSP ₹3000 से अधिक सूचित करो'\n\n"
+                                    "(Please specify the MSP threshold)"
+                                )
+                                await whatsapp.send_text_message(msg.from_phone, reply)
+                                logger.info(f"MSP alert missing threshold: {msg.from_phone}")
+                            else:
+                                scheme_handler = SchemeHandler(session)
+                                farmer_language = farmer.preferred_language or "mr"
+                                reply = await scheme_handler.handle_msp_alert(
+                                    farmer_id=str(farmer.id),
+                                    commodity=result.get("commodity", ""),
+                                    alert_threshold=threshold,
+                                    farmer_language=farmer_language,
+                                )
+                                await whatsapp.send_text_message(msg.from_phone, reply)
+                                logger.info(f"✅ Sent MSP alert confirmation to {msg.from_phone}")
 
                     # Subscribe to daily broadcast
                     elif intent_type == Intent.SUBSCRIBE:
