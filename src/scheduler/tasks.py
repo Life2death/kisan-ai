@@ -194,3 +194,57 @@ async def _hard_delete_erased_farmers_async():
 
     finally:
         await engine.dispose()
+
+
+@app.task(bind=True, max_retries=3)
+def ingest_weather(self):
+    """
+    Daily weather ingestion: fetch from IMD + OpenWeather for all 5 districts.
+    Runs at 6:00 AM IST (before price broadcast at 6:30 AM).
+
+    Phase 2 Module 1: Weather Integration
+    """
+    import asyncio
+    return asyncio.run(_ingest_weather_async())
+
+
+async def _ingest_weather_async():
+    """Actual weather ingestion logic (async)."""
+    logger.info("ingest_weather: starting")
+
+    try:
+        from src.ingestion.weather.orchestrator import run_ingestion
+
+        # Setup DB connection
+        engine = create_async_engine(settings.database_url)
+        async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+        async with async_session() as session:
+            trade_date = date.today()
+
+            # Run multi-source ingestion
+            summary = await run_ingestion(trade_date, session)
+
+            logger.info(
+                "ingest_weather: complete for %s — fetched=%d, normalized=%d, merged=%d, inserted=%d, errors=%d",
+                trade_date,
+                summary.total_fetched,
+                summary.total_normalized,
+                summary.total_merged,
+                summary.total_inserted,
+                len(summary.errors),
+            )
+
+            return {
+                "date": trade_date.isoformat(),
+                "fetched": summary.total_fetched,
+                "inserted": summary.total_inserted,
+                "errors": summary.errors,
+                "healthy": summary.healthy,
+            }
+
+    except Exception as exc:
+        logger.exception("ingest_weather: failed")
+        raise
+    finally:
+        await engine.dispose()

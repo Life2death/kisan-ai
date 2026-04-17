@@ -26,6 +26,7 @@ from typing import Optional
 
 class Intent(str, Enum):
     PRICE_QUERY = "price_query"
+    WEATHER_QUERY = "weather_query"  # Phase 2: weather forecast queries
     SUBSCRIBE = "subscribe"
     UNSUBSCRIBE = "unsubscribe"
     ONBOARDING = "onboarding"

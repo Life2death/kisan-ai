@@ -17,9 +17,14 @@ app.conf.update(
 
 # Beat schedule
 app.conf.beat_schedule = {
+    "ingest-weather-daily": {
+        "task": "src.scheduler.tasks.ingest_weather",
+        # 6:00 AM IST every day (Phase 2 Module 1)
+        "schedule": crontab(hour=6, minute=0),
+    },
     "broadcast-prices-daily": {
         "task": "src.scheduler.tasks.broadcast_prices",
-        # 6:30 AM IST every day
+        # 6:30 AM IST every day (runs 30 min after weather ingestion)
         "schedule": crontab(hour=6, minute=30),
     },
     "hard-delete-erased-farmers": {

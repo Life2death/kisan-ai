@@ -42,6 +42,9 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("AGMARKNET_API_KEY", "DATA_GOV_IN_API_KEY"),
     )
 
+    # Weather APIs (Phase 2)
+    openweather_api_key: str = ""  # OpenWeather API key (https://openweathermap.org)
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"

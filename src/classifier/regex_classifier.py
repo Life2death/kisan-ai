@@ -96,6 +96,28 @@ _FEEDBACK_RE = _p(
     r"अभिप्राय", r"सूचना\s*द्या", r"तक्रार", r"धन्यवाद",
 )
 
+# ── Weather query triggers (Phase 2) ──────────────────────────────────────
+_WEATHER_RE = _p(
+    # English
+    r"\bweather\b", r"\bforecast\b", r"\brain(fall)?\b",
+    r"\btemperature\b", r"\btemp\b", r"\bhumidity\b", r"\bwind\b",
+    r"\bkaisa\s+mausam\b", r"\bhow.?s?\s+the\s+weather\b",
+    # Marathi Devanagari
+    r"हवामान", r"पाऊस", r"पावसाचा\s*अंदाज", r"तापमान", r"ओलावा",
+    r"आजचे\s*हवामान", r"मौसम",
+    # Hinglish
+    r"\baaj\s+ka\s+mausam\b", r"\bgarmi\b", r"\bthandi\b",
+)
+
+# ── Weather metric extraction (Phase 2) ────────────────────────────────────
+_WEATHER_METRIC_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (_p(r"\btemp\b", r"\btemperature\b", r"\bgarmi\b", r"तापमान"), "temperature"),
+    (_p(r"\brain\b", r"\brainfall\b", r"\bprecip\b", r"पाऊस"), "rainfall"),
+    (_p(r"\bhumidity\b", r"\bhumid\b", r"ओलावा"), "humidity"),
+    (_p(r"\bwind\b", r"\bwind\s*speed\b", r"वारा"), "wind_speed"),
+    (_p(r"\bpressure\b", r"\bbarometer\b"), "pressure"),
+]
+
 # ── Commodity extraction ─────────────────────────────────────────────────
 # Each tuple: (regex, canonical_slug)
 _COMMODITY_PATTERNS: list[tuple[re.Pattern, str]] = [
@@ -218,6 +240,20 @@ def classify_regex(text: str) -> IntentResult:
             explanation="feedback_pattern",
         )
 
+    # Weather query (Phase 2)
+    if _WEATHER_RE.search(t):
+        metric = _extract_weather_metric(t)
+        district = _extract_district(t)
+        return IntentResult(
+            intent=Intent.WEATHER_QUERY,
+            confidence=1.0,
+            commodity=metric,  # Reuse commodity field for metric
+            district=district,
+            source="regex",
+            raw_text=text,
+            explanation="weather_pattern",
+        )
+
     # Only commodity mentioned — implicit price query
     commodity = _extract_commodity(t)
     if commodity:
@@ -250,6 +286,21 @@ def _extract_commodity(text: str) -> Optional[str]:
 
 def _extract_district(text: str) -> Optional[str]:
     for pattern, slug in _DISTRICT_PATTERNS:
+        if pattern.search(text):
+            return slug
+    return None
+
+
+def _extract_weather_metric(text: str) -> Optional[str]:
+    """Extract weather metric (temperature, rainfall, etc.) from text.
+
+    Args:
+        text: User message
+
+    Returns:
+        Canonical metric slug (e.g., "temperature") or None if not found
+    """
+    for pattern, slug in _WEATHER_METRIC_PATTERNS:
         if pattern.search(text):
             return slug
     return None
