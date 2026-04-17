@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 
-from sqlalchemy import String, Integer, Date, DateTime, Numeric, Boolean, Index, UniqueConstraint
+from sqlalchemy import String, Integer, Date, DateTime, Numeric, Boolean, Index, UniqueConstraint, ForeignKey, UUID as SA_UUID
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -45,3 +45,31 @@ class MandiPrice(Base):
         Index("idx_mandi_prices_commodity_date", "crop", "date"),
         Index("idx_mandi_prices_district_date", "district", "date"),
     )
+
+
+# Price Alerts (Phase 2 Module 5)
+class PriceAlert(Base):
+    """Farmer subscription to mandi price alerts (e.g., 'notify when onion > ₹5,000')."""
+
+    __tablename__ = "price_alerts"
+
+    id: Mapped[str] = mapped_column(SA_UUID(as_uuid=True), primary_key=True, default=func.gen_random_uuid())
+    farmer_id: Mapped[str] = mapped_column(SA_UUID(as_uuid=True), ForeignKey("farmers.id", ondelete="CASCADE"))
+    commodity: Mapped[str] = mapped_column(String(100), nullable=False)  # "onion", "wheat"
+    district: Mapped[Optional[str]] = mapped_column(String(100))  # optional: specific mandi
+    condition: Mapped[str] = mapped_column(String(10), nullable=False, default=">")  # ">", "<", "=="
+    threshold: Mapped[Decimal] = mapped_column(Numeric(precision=10, scale=2), nullable=False)  # ₹5000
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    triggered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))  # Last time alert sent
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("farmer_id", "commodity", "district", "condition", "threshold", name="uq_price_alert"),
+        Index("idx_price_alerts_farmer", "farmer_id"),
+        Index("idx_price_alerts_commodity", "commodity"),
+        Index("idx_price_alerts_active", "is_active"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PriceAlert {self.commodity}{self.condition}₹{self.threshold}>"

@@ -28,6 +28,7 @@ from typing import Optional
 
 class Intent(str, Enum):
     PRICE_QUERY = "price_query"
+    PRICE_ALERT = "price_alert"  # Phase 2 Module 5: mandi price alerts (notifications)
     WEATHER_QUERY = "weather_query"  # Phase 2 Module 1: weather forecast queries
     PEST_QUERY = "pest_query"  # Phase 2 Module 3: image-based pest diagnosis
     SCHEME_QUERY = "scheme_query"  # Phase 2 Module 4: eligible government schemes
