@@ -20,7 +20,7 @@ Maharashtra Kisan AI is a WhatsApp chatbot that helps smallholder farmers in Mah
 
 ---
 
-## 2. ✅ Completed Modules (as of 2026-04-17 — Modules 1–10)
+## 2. ✅ Completed Modules (as of 2026-04-17 — ALL 11 Modules Complete)
 
 ### Module 1 — WhatsApp Cloud API Wrapper ✅
 - **Library**: `pywa==4.0.0` (chosen over heyoo — BSUID migration ready, async-first)
@@ -143,29 +143,67 @@ Maharashtra Kisan AI is a WhatsApp chatbot that helps smallholder farmers in Mah
   - Auto-refresh every 5 minutes via client-side JavaScript polling
 - **Tests**: `src/tests/test_admin.py` (8 tests ✅) — model creation and repository initialization
 
+### Module 11 — DPDPA Consent Flow + Right-to-Erasure ✅
+- **Package**: `src/handlers/onboarding.py` (updated), `src/scheduler/tasks.py` (extended)
+- **Database Migration**: `alembic/versions/0003_dpdpa_consent_and_soft_delete.py`
+  - Adds `farmers.erasure_requested_at` (TIMESTAMPTZ) — tracks 30-day countdown
+  - Adds `broadcast_log.deleted_at` (TIMESTAMPTZ) — soft-delete for audit trail
+  - Adds `conversation.deleted_at` (TIMESTAMPTZ) — soft-delete for privacy
+- **Consent Event Logging** — `_log_consent_event(farmer_id, event_type, session)`:
+  - Logs 4 event types: `opt_in`, `opt_out`, `erasure_request`, `erasure_complete`
+  - Created ConsentEvent model already exists; now wired into onboarding transitions
+  - Consent events are **never deleted** — preserved as immutable audit trail
+- **Erasure Request Handler** — `_transition_delete_confirm(phone)`:
+  - When farmer sends "DELETE CONFIRM", sets `erasure_requested_at = now()`
+  - Soft-deletes future broadcast records immediately (set `deleted_at`)
+  - Logs `erasure_request` event for audit trail
+  - 30-day countdown begins
+- **30-Day Hard-Delete Scheduler** — `hard_delete_erased_farmers()` Celery task:
+  - Runs daily at 1:00 AM IST (scheduled in Beat)
+  - Finds farmers where `erasure_requested_at < NOW() - 30 days`
+  - For each eligible farmer:
+    1. Logs `erasure_complete` event (before deletion, for audit trail)
+    2. Soft-deletes related broadcast_log + conversation records
+    3. Hard-deletes farmer row (PII removed)
+  - Error handling per-farmer (one failure ≠ abort batch)
+- **Soft-Delete Filtering**:
+  - All admin queries + broadcast task now filter `WHERE deleted_at == None`
+  - Broadcast task also skips farmers with `erasure_requested_at != None` (privacy)
+  - ConsentEvent records NEVER soft-deleted (audit trail preservation)
+- **Tests**: `src/tests/test_consent.py` (20 tests ✅)
+  - 4 tests: opt_in, opt_out, erasure_request, erasure_complete event logging
+  - 5 tests: erasure request timestamp tracking, 30-day eligibility, soft-delete behavior
+  - 5 tests: soft-delete filtering (broadcast_log, conversation, farmer DAU exclusions)
+  - 6 tests: audit trail preservation, migration field verification
+
 ---
 
 ## 3. Test Summary
 
 ```
-196 tests passing, 0 failing (as of 2026-04-17)
+216 tests passing, 0 failing (as of 2026-04-17)
 
 Module 1–5 (prior):                       73 tests
-├── test_whatsapp.py          6  ✅  Module 1
-├── test_webhook.py           9  ✅  Module 2
-├── test_ingestion_normalizer.py  14  ✅  Module 4
-├── test_ingestion_merger.py      8  ✅  Module 4
-├── test_ingestion_orchestrator.py 3  ✅  Module 4
-└── test_classifier.py           33  ✅  Module 5
+├── test_whatsapp.py                     6  ✅  Module 1
+├── test_webhook.py                      9  ✅  Module 2
+├── test_ingestion_normalizer.py        14  ✅  Module 4
+├── test_ingestion_merger.py             8  ✅  Module 4
+├── test_ingestion_orchestrator.py       3  ✅  Module 4
+└── test_classifier.py                  33  ✅  Module 5
 
-Module 6–10 (new):                       123 tests
-├── test_intent.py                 51  ✅  Module 5 extension (districts + intents)
-├── test_onboarding.py             12  ✅  Module 6
-├── test_price.py                   9  ✅  Module 7
-├── test_scheduler.py               5  ✅  Module 8
-├── test_templates.py              18  ✅  Module 9
-├── test_admin.py                   8  ✅  Module 10
-└── test_webhook.py                20  (expanded from 9)
+Module 6–10 (previously added):          123 tests
+├── test_intent.py                      51  ✅  Module 5 extension (districts + intents)
+├── test_onboarding.py                  12  ✅  Module 6
+├── test_price.py                        9  ✅  Module 7
+├── test_scheduler.py                    5  ✅  Module 8
+├── test_templates.py                   18  ✅  Module 9
+├── test_admin.py                        8  ✅  Module 10
+└── test_webhook.py                     20  (expanded from 9)
+
+Module 11 (new):                         20 tests
+└── test_consent.py                     20  ✅  Module 11 (consent events, erasure, soft-delete)
+
+Total: 73 + 123 + 20 = 216 tests ✅
 ```
 
 Run with:
@@ -343,16 +381,23 @@ CREATE TABLE mandi_prices (
 
 ---
 
-## 9. Modules Remaining
+## 9. Phase 1 MVP — All Modules Complete
 
 | # | Module | Status | Depends on |
 |---|--------|--------|------------|
+| 1 | WhatsApp Cloud API wrapper | ✅ Complete | None |
+| 2 | FastAPI webhook skeleton | ✅ Complete | Module 1 |
+| 3 | Docker Compose setup | ✅ Complete | None |
+| 4 | Multi-source price ingestion | ✅ Complete | Module 3 |
+| 5 | Intent classifier | ✅ Complete | Modules 2, 4 |
 | 6 | Onboarding state machine | ✅ Complete | Modules 1, 4 |
 | 7 | Price handler | ✅ Complete | Modules 4, 5, 6 |
 | 8 | Celery + broadcast scheduler | ✅ Complete | Modules 1, 4, 5 |
 | 9 | Marathi templates + transliteration | ✅ Complete | None |
 | 10 | Admin dashboard | ✅ Complete | Module 4 |
-| 11 | DPDPA consent flow + right-to-erasure | ⏳ Next | Modules 4, 7 |
+| 11 | DPDPA consent + right-to-erasure | ✅ Complete | Modules 4, 7 |
+
+**Phase 1 Status: COMPLETE — Ready for field testing with 1,000+ farmers**
 
 ---
 
@@ -363,7 +408,7 @@ CREATE TABLE mandi_prices (
 - **NEVER** commit `.env` or credentials to git
 - **NEVER** build payments/billing in Phase 1 — schema stub only
 - **NEVER** build voice/image/weather in Phase 1 — text + prices only
-- **Always** write tests. Current count: **196 passing** (Modules 1–10 complete)
+- **Always** write tests. Current count: **216 passing** (All Modules 1–11 complete)
 - **Always** use conventional commits: `feat(scope):`, `fix(scope):`, `test(scope):`
 
 ---

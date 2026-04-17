@@ -22,6 +22,11 @@ app.conf.beat_schedule = {
         # 6:30 AM IST every day
         "schedule": crontab(hour=6, minute=30),
     },
+    "hard-delete-erased-farmers": {
+        "task": "src.scheduler.tasks.hard_delete_erased_farmers",
+        # 1:00 AM IST every day (= 00:30 UTC; Celery uses UTC)
+        "schedule": crontab(hour=19, minute=30),  # 1:00 AM IST = 19:30 UTC previous day
+    },
 }
 
 # Import tasks so they're registered

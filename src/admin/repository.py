@@ -224,9 +224,10 @@ class AdminRepository:
 
     async def get_broadcast_health(self) -> Optional[BroadcastHealth]:
         """Last broadcast task run status."""
-        # Get most recent broadcast_log records (sent or failed)
+        # Get most recent broadcast_log records (sent or failed), excluding soft-deleted
         stmt = select(BroadcastLog).where(
-            BroadcastLog.status.in_(["sent", "delivered", "failed"])
+            BroadcastLog.status.in_(["sent", "delivered", "failed"]),
+            BroadcastLog.deleted_at == None,
         ).order_by(BroadcastLog.created_at.desc()).limit(100)
 
         result = await self.session.execute(stmt)

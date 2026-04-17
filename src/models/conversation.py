@@ -21,6 +21,7 @@ class Conversation(Base):
     detected_intent: Mapped[Optional[str]] = mapped_column(String(50))
     detected_entities: Mapped[Optional[Any]] = mapped_column(JSONB)
     response_sent: Mapped[Optional[str]] = mapped_column(Text)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

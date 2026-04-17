@@ -10,11 +10,17 @@ Side paths (from any state):
 import json
 import logging
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from typing import Optional
 
 import redis.asyncio as aioredis
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select, update
 
 from src.config import settings
+from src.models.farmer import Farmer
+from src.models.consent import ConsentEvent
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +44,21 @@ CONSENT_VERSION = "1.0"
 
 # Redis TTL: 24 hours (in-progress onboarding sessions)
 SESSION_TTL = 86_400
+
+# Database session factory
+_engine = None
+_async_session_factory = None
+
+
+async def _get_db_session() -> AsyncSession:
+    """Get a database session for persistence."""
+    global _engine, _async_session_factory
+    if _engine is None:
+        _engine = create_async_engine(settings.database_url, echo=False)
+        _async_session_factory = sessionmaker(
+            _engine, class_=AsyncSession, expire_on_commit=False
+        )
+    return _async_session_factory()
 
 
 @dataclass
@@ -99,6 +120,10 @@ async def handle(phone: str, text: str) -> str:
 
     session = await load_session(phone)
     state = session.state
+
+    # Handle DELETE CONFIRM for erasure_requested state
+    if state == "erasure_requested" and _matches_delete_confirm(msg):
+        return await _transition_delete_confirm(phone)
 
     if state in ("opted_out", "erasure_requested", "erased"):
         return _msg_already_opted_out(session.preferred_language)
@@ -258,6 +283,7 @@ async def _transition_stop(phone: str) -> str:
 
 
 async def _transition_delete(phone: str) -> str:
+    """Handle DELETE request — ask for confirmation."""
     session = await load_session(phone)
     session.state = "erasure_requested"
     await save_session(session)
@@ -267,21 +293,196 @@ async def _transition_delete(phone: str) -> str:
     )
 
 
-# ---------------------------------------------------------------------------
-# DB persistence stubs (implemented in Module 4)
-# ---------------------------------------------------------------------------
+async def _transition_delete_confirm(phone: str) -> str:
+    """Handle DELETE CONFIRM — persist erasure request and log event.
 
-async def _persist_to_db(session: OnboardingSession) -> None:
-    """Write completed onboarding session to Postgres. Stub — wired in Module 4."""
-    logger.info(
-        "Persisting farmer phone=%s name=%s district=%s crops=%s lang=%s",
-        session.phone, session.name, session.district, session.crops, session.preferred_language,
+    Sets erasure_requested_at timestamp and logs erasure_request event.
+    """
+    try:
+        db = await _get_db_session()
+        async with db:
+            # Find farmer by phone
+            stmt = select(Farmer).where(Farmer.phone == phone)
+            result = await db.execute(stmt)
+            farmer = result.scalar_one_or_none()
+
+            if farmer:
+                # Set erasure_requested_at to trigger 30-day countdown
+                farmer.erasure_requested_at = datetime.now()
+                await db.flush()
+
+                # Log erasure_request event
+                await _log_consent_event_with_farmer_id(farmer.id, "erasure_request", db)
+
+                # Soft-delete future broadcast records (set deleted_at)
+                from src.models.broadcast import BroadcastLog
+                stmt_update = (
+                    update(BroadcastLog)
+                    .where(BroadcastLog.farmer_id == farmer.id)
+                    .values(deleted_at=datetime.now())
+                )
+                await db.execute(stmt_update)
+
+                await db.commit()
+
+                logger.info(
+                    "Erasure request confirmed farmer_id=%d phone=%s",
+                    farmer.id, phone,
+                )
+            else:
+                logger.warning(
+                    "Could not find farmer phone=%s for erasure confirmation",
+                    phone,
+                )
+    except Exception as e:
+        logger.error(
+            "Error confirming erasure for phone=%s: %s",
+            phone, e,
+        )
+
+    # Clear session and return confirmation
+    await delete_session(phone)
+
+    return (
+        "आपला डेटा 30 दिवसांत हटवला जाईल. विनंती करण्याबद्दल धन्यवाद.\n"
+        "Your data will be deleted in 30 days. Thank you for letting us know."
     )
 
 
+# ---------------------------------------------------------------------------
+# DB persistence (Module 11)
+# ---------------------------------------------------------------------------
+
+async def _persist_to_db(session: OnboardingSession) -> None:
+    """Write completed onboarding session to Postgres.
+
+    Creates or updates farmer record and logs opt_in consent event.
+    """
+    try:
+        db = await _get_db_session()
+        async with db:
+            # Find existing farmer by phone
+            stmt = select(Farmer).where(Farmer.phone == session.phone)
+            result = await db.execute(stmt)
+            farmer = result.scalar_one_or_none()
+
+            if not farmer:
+                # Create new farmer
+                farmer = Farmer(
+                    phone=session.phone,
+                    name=session.name,
+                    district=session.district,
+                    preferred_language=session.preferred_language,
+                    subscription_status="active",
+                    onboarding_state="active",
+                    consent_given_at=datetime.now(),
+                    consent_version=CONSENT_VERSION,
+                )
+                db.add(farmer)
+                await db.flush()
+            else:
+                # Update existing farmer
+                farmer.name = session.name
+                farmer.district = session.district
+                farmer.preferred_language = session.preferred_language
+                farmer.subscription_status = "active"
+                farmer.onboarding_state = "active"
+                farmer.consent_given_at = datetime.now()
+                farmer.consent_version = CONSENT_VERSION
+                await db.flush()
+
+            # Log opt_in consent event
+            await _log_consent_event_with_farmer_id(farmer.id, "opt_in", db)
+
+            # Update crops of interest
+            from src.models.farmer import CropOfInterest
+            # Delete existing crops
+            await db.execute(
+                select(CropOfInterest).where(CropOfInterest.farmer_id == farmer.id)
+            )
+            # Add new crops
+            for crop in session.crops:
+                coi = CropOfInterest(farmer_id=farmer.id, crop=crop)
+                db.add(coi)
+
+            await db.commit()
+
+            logger.info(
+                "Persisted farmer phone=%s id=%d name=%s district=%s crops=%s lang=%s",
+                session.phone, farmer.id, session.name, session.district,
+                session.crops, session.preferred_language,
+            )
+    except Exception as e:
+        logger.error("Error persisting farmer to DB: %s", e)
+
+
+async def _log_consent_event_with_farmer_id(
+    farmer_id: int, event_type: str, db: AsyncSession = None
+) -> None:
+    """Log a consent event to Postgres with farmer_id.
+
+    Args:
+        farmer_id: ID of the farmer
+        event_type: 'opt_in', 'opt_out', 'erasure_request', 'erasure_complete'
+        db: Optional existing database session (reuse if provided)
+    """
+    own_session = False
+    if db is None:
+        db = await _get_db_session()
+        own_session = True
+
+    try:
+        event = ConsentEvent(
+            farmer_id=farmer_id,
+            event_type=event_type,
+            consent_version=CONSENT_VERSION,
+            created_at=datetime.now(),
+        )
+        db.add(event)
+        if own_session:
+            await db.commit()
+        logger.info(
+            "Logged consent event farmer_id=%d type=%s",
+            farmer_id, event_type,
+        )
+    except Exception as e:
+        logger.error(
+            "Error logging consent event farmer_id=%d type=%s: %s",
+            farmer_id, event_type, e,
+        )
+    finally:
+        if own_session:
+            await db.close()
+
+
 async def _log_consent_event(phone: str, event_type: str) -> None:
-    """Append a consent event to Postgres. Stub — wired in Module 4."""
-    logger.info("Consent event phone=%s type=%s", phone, event_type)
+    """Log a consent event by phone number.
+
+    Looks up farmer by phone, then logs the event.
+
+    Args:
+        phone: Farmer's phone number
+        event_type: 'opt_in', 'opt_out', 'erasure_request', 'erasure_complete'
+    """
+    try:
+        db = await _get_db_session()
+        async with db:
+            stmt = select(Farmer).where(Farmer.phone == phone)
+            result = await db.execute(stmt)
+            farmer = result.scalar_one_or_none()
+
+            if farmer:
+                await _log_consent_event_with_farmer_id(farmer.id, event_type, db)
+            else:
+                logger.warning(
+                    "Could not find farmer for phone=%s to log event type=%s",
+                    phone, event_type,
+                )
+    except Exception as e:
+        logger.error(
+            "Error logging consent event for phone=%s type=%s: %s",
+            phone, event_type, e,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +496,12 @@ def _matches_stop(msg: str) -> bool:
 def _matches_delete(msg: str) -> bool:
     import re
     return bool(re.match(r"^(delete|माझा डेटा हटवा|erase)", msg.strip(), re.IGNORECASE))
+
+
+def _matches_delete_confirm(msg: str) -> bool:
+    """Check if message is DELETE CONFIRM."""
+    import re
+    return bool(re.match(r"^delete\s+confirm|^डेटा हटवा आहे$", msg.strip(), re.IGNORECASE))
 
 
 def _msg_already_opted_out(lang: str) -> str:

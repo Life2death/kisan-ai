@@ -2,15 +2,18 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from src.adapters.whatsapp import WhatsAppAdapter
 from src.config import settings
 from src.models.farmer import Farmer
+from src.models.broadcast import BroadcastLog
+from src.models.conversation import Conversation
+from src.models.consent import ConsentEvent
 from src.price.models import PriceQuery
 from src.price.repository import PriceRepository
 from src.price.formatter import format_price_reply
@@ -39,11 +42,12 @@ async def _broadcast_prices_async():
 
     try:
         async with async_session() as session:
-            # Fetch all farmers with active subscriptions
+            # Fetch all farmers with active subscriptions (exclude soft-deleted and erasure-requested)
             stmt = select(Farmer).where(
                 Farmer.subscription_status == "active",
                 Farmer.onboarding_state == "active",
                 Farmer.deleted_at == None,
+                Farmer.erasure_requested_at == None,  # Don't send to farmers in erasure window
             )
             result = await session.execute(stmt)
             farmers = result.scalars().all()
@@ -96,6 +100,97 @@ async def _broadcast_prices_async():
                 sent_count, error_count,
             )
             return {"sent": sent_count, "errors": error_count}
+
+    finally:
+        await engine.dispose()
+
+
+@app.task(bind=True, max_retries=3)
+def hard_delete_erased_farmers(self):
+    """
+    Hard-delete farmers whose 30-day erasure countdown has expired.
+
+    For each farmer with erasure_requested_at > 30 days old:
+    1. Log erasure_complete event (before deletion)
+    2. Soft-delete related broadcast_log and conversation records
+    3. Hard-delete the farmer row
+
+    Runs daily at 1:00 AM IST (00:30 UTC).
+    """
+    import asyncio
+    return asyncio.run(_hard_delete_erased_farmers_async())
+
+
+async def _hard_delete_erased_farmers_async():
+    """Actual hard-delete logic (async)."""
+    logger.info("hard_delete_erased_farmers: starting")
+
+    engine = create_async_engine(settings.database_url)
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    try:
+        async with async_session() as session:
+            # Find farmers with erasure_requested_at > 30 days ago
+            cutoff = datetime.now() - timedelta(days=30)
+            stmt = select(Farmer).where(
+                Farmer.erasure_requested_at != None,
+                Farmer.erasure_requested_at < cutoff,
+                Farmer.deleted_at == None,  # Not already hard-deleted
+            )
+            result = await session.execute(stmt)
+            farmers_to_erase = result.scalars().all()
+
+            erased_count = 0
+            error_count = 0
+
+            logger.info("hard_delete_erased_farmers: found %d eligible farmers", len(farmers_to_erase))
+
+            for farmer in farmers_to_erase:
+                try:
+                    # 1. Log erasure_complete event (BEFORE deletion for audit trail)
+                    ce = ConsentEvent(
+                        farmer_id=farmer.id,
+                        event_type="erasure_complete",
+                        created_at=datetime.now(),
+                    )
+                    session.add(ce)
+                    await session.flush()
+
+                    # 2. Soft-delete related broadcast_log records
+                    stmt_bl = update(BroadcastLog).where(
+                        BroadcastLog.farmer_id == farmer.id
+                    ).values(deleted_at=datetime.now())
+                    await session.execute(stmt_bl)
+
+                    # 3. Soft-delete related conversation records
+                    stmt_conv = update(Conversation).where(
+                        Conversation.farmer_id == farmer.id
+                    ).values(deleted_at=datetime.now())
+                    await session.execute(stmt_conv)
+
+                    # 4. Hard-delete the farmer row
+                    await session.delete(farmer)
+
+                    await session.commit()
+
+                    erased_count += 1
+                    logger.info(
+                        "hard_delete_erased_farmers: erased farmer_id=%d phone=%s",
+                        farmer.id, farmer.phone,
+                    )
+
+                except Exception as exc:
+                    error_count += 1
+                    logger.error(
+                        "hard_delete_erased_farmers: error for farmer_id=%d: %s",
+                        farmer.id, exc,
+                    )
+
+            logger.info(
+                "hard_delete_erased_farmers: complete erased=%d errors=%d",
+                erased_count, error_count,
+            )
+            return {"erased": erased_count, "errors": error_count}
 
     finally:
         await engine.dispose()
