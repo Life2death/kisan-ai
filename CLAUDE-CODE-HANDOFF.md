@@ -1,6 +1,6 @@
 # Maharashtra Kisan AI — Claude Code Handoff Document
 
-**Last updated**: 2026-04-18 — Phase 2 Module 2 (Voice) complete  
+**Last updated**: 2026-04-18 — Phase 2 Module 3 (Pest Diagnosis) complete  
 **GitHub**: https://github.com/Life2death/kisan-ai  
 **Owner**: Vikram Panmand (vikram.panmand@gmail.com)
 
@@ -219,25 +219,112 @@ Maharashtra Kisan AI is a WhatsApp chatbot that helps smallholder farmers in Mah
   - Message formatting (6 tests)
   - Webhook parsing (2 tests)
 
+### Phase 2 Module 3 — Image-based Pest & Disease Diagnosis ✅
+- **Package**: `src/diagnosis/`, `src/tests/test_diagnosis.py`, `src/handlers/webhook.py` (extended), `src/main.py` (extended)
+- **Core Processor** (`src/diagnosis/processor.py`):
+  - `ImageDiagnoser` class with hybrid TensorFlow (primary) + Gemini Vision (fallback) inference
+  - `DiagnosisResult` dataclass: pest (English), disease_marathi, confidence (0.0-1.0), severity ("mild"/"moderate"/"severe"/"none"), treatment (optional), source ("tensorflow" or "gemini")
+  - TensorFlow pathway:
+    - Loads `.h5` model from `tensorflow_model_path` config (gracefully skips if missing)
+    - Image preprocessing: PIL Image → RGB → resize to 224×224 → normalize 0-1
+    - Model inference with 30-second timeout (runs in executor to avoid blocking)
+    - Pest name mapping (20 top Maharashtra crop pests): "Powdery Mildew", "Leaf Blight", "Rust", "Mosaic Virus", "Anthracnose", etc.
+    - Severity determination from confidence: >0.9 → severe, >0.7 → moderate, else → mild
+  - Gemini Vision fallback:
+    - Structured JSON prompt requesting pest name, Marathi translation, confidence, severity, treatment recommendations
+    - Parses JSON response, maps to DiagnosisResult
+    - 60-second timeout
+  - Error handling: Missing TensorFlow model → use Gemini only (production-safe); both fail → raise DiagnosisError
+  - Helper method `_translate_to_marathi()` maps English pest names to Marathi (e.g., "Powdery Mildew" → "पाउडर मिल्ड्यू")
+- **Handler** (`src/diagnosis/handler.py`):
+  - `DiagnosisHandler` class orchestrating diagnosis workflow
+  - `handle(intent, media_url, farmer_phone, farmer_language)` method:
+    1. Calls `diagnoser.diagnose(media_url)` → DiagnosisResult
+    2. Stores result in repository (optional, for analytics)
+    3. Formats reply based on confidence (high-conf → full diagnosis; <50% → warning; error → fallback)
+    4. Returns formatted Marathi/English message
+- **Repository** (`src/diagnosis/repository.py`):
+  - `DiagnosisRepository` for persistence + analytics
+  - `save_diagnosis()` — stores farmer diagnosis (pest, disease_marathi, confidence, severity, treatment, source)
+  - `get_farmer_diagnosis_history(farmer_phone, limit=10)` — recent diagnoses for a farmer
+  - `get_district_pest_stats(district, limit=5)` — most common pests diagnosed in district (future insights)
+  - Optional database table: `diagnoses (farmer_phone, pest, disease_marathi, confidence, severity, treatment, source, diagnosed_at)`
+- **Formatters** (`src/diagnosis/formatter.py`):
+  - `format_diagnosis_reply(result, lang="mr")` — Marathi/English high-confidence reply with:
+    - Severity emoji (🟢 mild, 🟡 moderate, 🔴 severe)
+    - Pest name + Marathi translation + confidence %
+    - Treatment recommendations (if provided by model)
+    - Link to agricultural officer contact
+  - `format_diagnosis_low_confidence(result, lang="mr")` — <50% confidence warning:
+    - Warns farmer to consult agricultural officer
+    - Suggests taking clearer photo
+  - `format_diagnosis_failed(lang="mr")` — Fallback when diagnosis unavailable:
+    - Apologies, suggests retry with better photo
+    - Offers alternative: contact agricultural officer or send farming message
+  - All formatters return Marathi by default, English fallback
+- **Intent Classifier Update** (`src/classifier/intents.py`):
+  - Added `PEST_QUERY = "pest_query"` to `Intent` enum
+  - Image messages automatically map to PEST_QUERY (no text classification needed)
+- **Webhook Integration** (`src/handlers/webhook.py`):
+  - `IncomingMessage.is_image()` method to detect image messages
+  - `parse_webhook_message()` extracts image metadata: media_id, media_url (extracted later), mime_type
+  - `handle_message()` detects image messages:
+    - If media_url present → returns `{"status": "image_ready", "intent": "pest_query", "confidence": 1.0}`
+    - If media_url missing → returns `{"status": "image_error", "intent": "pest_query"}`
+    - Skips text classification (images don't have text)
+- **Main Webhook Endpoint** (`src/main.py`):
+  - Extended message handling to detect image messages + retrieve media_url (same pattern as audio)
+  - Added PEST_QUERY routing:
+    - Instantiates `ImageDiagnoser` with config (tensorflow_model_path, gemini_vision_enabled, timeouts, confidence_threshold)
+    - Creates `DiagnosisHandler(diagnoser)`
+    - Calls `handler.handle(result, media_url=msg.media_url, farmer_phone=msg.from_phone, farmer_language="mr")`
+    - Sends formatted reply via WhatsApp
+- **Configuration** (`src/config.py`):
+  - `tensorflow_model_path` — path to `.h5` model file (e.g., "models/crop_disease_classifier.h5")
+  - `gemini_vision_enabled` — boolean to enable/disable Gemini fallback
+  - `image_processing_timeout` — max seconds for diagnosis (default 60)
+  - `diagnosis_confidence_threshold` — min confidence to report (default 0.7)
+- **Tests**: `src/tests/test_diagnosis.py` (25+ tests ✅)
+  - TestImageDownload: success, timeout, network errors (3 tests)
+  - TestTensorFlowDiagnosis: model loading, inference, severity determination, low/high/severe confidence (4 tests)
+  - TestGeminiVisionDiagnosis: successful diagnosis, no pest detected, JSON parse errors, not configured (4 tests)
+  - TestDiagnosisFlow: TensorFlow primary, Gemini fallback, both fail, download fails (4 tests)
+  - TestDiagnosisHandler: high-confidence, low-confidence, error handling (3 tests)
+  - TestDiagnosisFormatter: Marathi/English formatting, severity levels, failure messages, no pest (6 tests)
+  - TestWebhookIntegration: image message routing, media URL handling, missing media (3 tests)
+  - TestEdgeCases: unknown pests, timeouts, boundary conditions (4 tests)
+- **Architecture**:
+  - Mirrors Phase 2 Module 2 (Voice) pattern: Download → Process → Fallback
+  - Extensible: easy to swap TensorFlow for PyTorch, add new models, or swap Gemini for Claude
+  - Same media_url pattern as voice (24-hour Meta expiry)
+  - Same error handling (timeouts, network, invalid responses)
+  - Same async orchestration pattern
+- **Requirements added**:
+  - `tensorflow>=2.13.0` — for local model inference
+  - `pillow>=10.0.0` — for image preprocessing
+  - `scikit-image>=0.21.0` — for advanced image operations (optional, for future enhancements)
+
 ---
 
 ## 3. Test Summary
 
 ```
-256+ tests passing, 0 failing (as of 2026-04-18)
+281+ tests passing, 0 failing (as of 2026-04-18)
 
 Phase 1 Modules 1–11:                     216 tests
 ├── Module 1-5 (core):                    73 tests
 ├── Module 6-10 (onboarding-admin):      123 tests
 └── Module 11 (DPDPA consent):            20 tests
 
-Phase 2 Modules 1-2:                       40+ tests
+Phase 2 Modules 1-3:                       65+ tests
 ├── Module 1 (weather):                   20+ tests ✅
 │   └── test_weather.py: intent classification, normalization, merging, formatting, handler
-└── Module 2 (voice):                     20+ tests ✅
-    └── test_voice.py: transcription, webhook handling, intent classification, error handling, formatting
+├── Module 2 (voice):                     20+ tests ✅
+│   └── test_voice.py: transcription, webhook handling, intent classification, error handling, formatting
+└── Module 3 (pest diagnosis):            25+ tests ✅
+    └── test_diagnosis.py: image download, TensorFlow inference, Gemini fallback, handler, formatter, webhook routing, edge cases
 
-Total: 216 + 40+ = 256+ tests ✅
+Total: 216 + 65+ = 281+ tests ✅
 ```
 
 Run with:

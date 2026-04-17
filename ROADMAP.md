@@ -102,9 +102,20 @@ No apps to download. No English needed. Zero cost for farmers.
 - ✅ 40+ comprehensive tests
 - ✅ Graceful error handling + fallback messages
 
+### Phase 2 Module 3: Image-based Pest & Disease Diagnosis (✅ COMPLETE — April 18, 2026)
+
+**Status**: 100% complete — Production-ready hybrid diagnosis
+- ✅ Local TensorFlow model (top 20 Maharashtra crop pests) + Gemini Vision fallback
+- ✅ Image download from Meta WhatsApp URLs (24h media URL expiry)
+- ✅ Structured DiagnosisResult (pest name, Marathi translation, confidence, severity)
+- ✅ Treatment recommendations in Marathi via formatted replies
+- ✅ Webhook image message handling (media URL fetching, pest diagnosis routing)
+- ✅ DiagnosisHandler + DiagnosisRepository for persistence & analytics
+- ✅ 25+ comprehensive tests (download, TensorFlow, Gemini, fallback, formatting)
+- ✅ Graceful error handling (missing model → Gemini-only mode)
+- ✅ Severity determination from confidence (mild < 0.7, moderate < 0.9, severe ≥ 0.9)
+
 **Remaining Phase 2 Modules**:
-- Module 3: Photo upload → hybrid pest & disease diagnosis  
-  → Local TensorFlow model (top 20 pests) + Gemini Vision fallback
 - Module 4: Government schemes & MSP alerts (PM-KISAN, crop insurance, subsidies)
 - Module 5: Price alerts ("notify me when onion > ₹5000")
 - Module 6: Conversation memory (Redis-based last 10 messages)

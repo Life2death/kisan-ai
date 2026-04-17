@@ -12,6 +12,25 @@ Format:
 
 ---
 
+- **2026-04-18 — Phase 2 Module 3: Image-based Pest & Disease Diagnosis**
+  - Chose: Hybrid approach — Local TensorFlow model (primary) + Gemini Vision API (fallback)
+  - Runner-up: Gemini Vision only; PyTorch-based model
+  - Why: TensorFlow provides fast local inference (~500ms, offline-capable, free) for top 20 Maharashtra crop pests; Gemini Vision handles edge cases/unknown diseases; hybrid pattern proven by Phase 2 Module 2 (voice STT)
+  - Trade-off accepted: Model file management (100MB+ not in git, user downloads separately); mitigated by graceful fallback to Gemini-only mode if model missing
+  - Implementation:
+    - Database: Optional diagnoses table (or extend Conversation.detected_entities) for diagnosis history + district pest analytics
+    - ImageDiagnoser: Async class with TensorFlow + Gemini Vision pathways, 30s TensorFlow timeout, 60s Gemini timeout
+    - Image preprocessing: PIL Image → RGB → resize (224x224) → normalize (0-1)
+    - Severity determination: confidence > 0.9 → severe; > 0.7 → moderate; else → mild
+    - DiagnosisResult dataclass: pest, disease_marathi, confidence, severity, treatment (optional), source ("tensorflow" or "gemini")
+    - DiagnosisHandler: Orchestrates diagnosis workflow, stores results, formats replies (Marathi/English)
+    - DiagnosisRepository: Farmer diagnosis history, district-level pest statistics (future analytics)
+    - Formatters: format_diagnosis_reply() (high-conf), format_diagnosis_low_confidence() (<50%), format_diagnosis_failed()
+    - Webhook: Extended IncomingMessage.is_image(), updated handle_message() to detect images, route to PEST_QUERY intent
+    - Main webhook endpoint: get_media_url() for images (same as voice), route PEST_QUERY → DiagnosisHandler
+  - Testing: 25+ tests covering image download, TensorFlow inference, Gemini fallback, handler integration, formatting, webhook routing, edge cases
+  - Evaluation: Extensible architecture (easy to swap TensorFlow for PyTorch, add new models); production-ready error handling; reusable media pattern from Phase 2 Module 2
+
 - **2026-04-18 — Phase 2 Module 2: Voice Message Support**
   - Chose: Google Cloud Speech-to-Text (primary) + Whisper (fallback) with "Transcribe → Re-classify" design
   - Runner-up: Audio-native LLM classifier (Gemini Pro); Whisper-only
