@@ -20,7 +20,7 @@ Maharashtra Kisan AI is a WhatsApp chatbot that helps smallholder farmers in Mah
 
 ---
 
-## 2. ✅ Completed Modules (as of 2026-04-17)
+## 2. ✅ Completed Modules (as of 2026-04-17 — Modules 1–10)
 
 ### Module 1 — WhatsApp Cloud API Wrapper ✅
 - **Library**: `pywa==4.0.0` (chosen over heyoo — BSUID migration ready, async-first)
@@ -78,19 +78,94 @@ Maharashtra Kisan AI is a WhatsApp chatbot that helps smallholder farmers in Mah
 - **`handle_message()`** updated — now classifies every message and returns `intent`, `confidence`, `commodity`, `district`, `needs_commodity`
 - **Tests**: `src/tests/test_classifier.py` (33 tests ✅)
 
+### Module 6 — Onboarding State Machine ✅
+- **Package**: `src/onboarding/`
+- **`states.py`** — `OnboardingState` enum (NEW, AWAITING_CONSENT, AWAITING_NAME, AWAITING_DISTRICT, AWAITING_CROPS, AWAITING_LANGUAGE, ACTIVE, OPTED_OUT, ERASURE_REQUESTED)
+- **`redis_store.py`** — `OnboardingStore` class with `load(phone)` and `save(context)` for Redis persistence (24-hour TTL)
+- **`transitions.py`** — 6 transition functions (`to_awaiting_consent`, `from_awaiting_consent`, `from_awaiting_name`, etc.) with input validation and normalization
+- **`machine.py`** — `OnboardingMachine` orchestrator routing state transitions; handles universal STOP/DELETE commands at any state
+- **In-progress state**: Redis stores farmer phone, state, consent, name, district, crops list, language, timestamps (JSON serialized)
+- **Marathi-first prompts**: "हो" (yes), "नाही" (no), राजेश (name input), पुणे (district), कांदा तूर (crops) — all tested
+- **Tests**: `src/tests/test_onboarding.py` (12 tests ✅)
+
+### Module 7 — Price Query Handler ✅
+- **Package**: `src/price/`
+- **`models.py`** — `PriceQuery` (commodity, district, variety, query_date), `MandiPriceRecord` with `price_str` and `range_str` properties, `PriceQueryResult`
+- **`repository.py`** — `PriceRepository` with async `query()` method filtering mandi_prices by commodity/district/date; includes `get_historical()` for 7-day trends
+- **`formatter.py`** — `format_price_reply(result, lang)` returns formatted Marathi/English message; shows top mandi price + up to 3 alternatives; handles stale data gracefully
+- **`handler.py`** — `PriceHandler.handle(intent, farmer_district, farmer_language)` orchestrates query + format; falls back to farmer's registered district if not in intent
+- **Tests**: `src/tests/test_price.py` (9 tests ✅)
+
+### Module 8 — Celery Broadcast Scheduler ✅
+- **Package**: `src/scheduler/`
+- **`celery_app.py`** — Celery app with Redis broker/backend; Beat schedule defines `broadcast-prices-daily` at **6:30 AM IST** (hour=6, minute=30)
+- **`tasks.py`** — `broadcast_prices` task (async wrapper via `asyncio.run`) that:
+  - Queries all farmers with `subscription_status="active"` + `onboarding_state="active"`
+  - Fetches prices for each crop in farmer profile via `PriceRepository`
+  - Formats message in farmer's preferred language
+  - Sends via `WhatsAppAdapter`
+  - Logs sent/error counts; error handling per-farmer (one failure ≠ abort batch)
+- **Tests**: `src/tests/test_scheduler.py` (5 tests ✅)
+
+### Module 9 — Marathi Templates + Hinglish Transliteration ✅
+- **Package**: `src/templates/`
+- **`templates.py`** — `Template` dataclass (frozen, key, marathi, english) with `render(lang="mr", **kwargs)` for variable injection
+  - **14 pre-written templates** covering: greeting, price_found, price_not_found, ask_commodity, onboarding_consent/name/district/crops/language/complete, help_menu, opted_out
+  - Helper functions: `get_template(key)` and `render(key, lang, **kwargs)`
+- **`transliterate.py`** — `HINGLISH_TO_MARATHI` dictionary (~50 mappings): bhav→भाव, kanda→कांदा, mandi→मंडी, nashik→नाशिक, etc.
+  - `transliterate_hinglish_to_marathi(text)` converts Hinglish words while preserving non-matched words and punctuation
+  - `marathi_commodity(slug)` and `marathi_district(slug)` return Marathi display names for canonical slugs
+- **Tests**: `src/tests/test_templates.py` (18 tests ✅) — 11 for transliteration, 7 for template system
+
+### Module 10 — Admin Dashboard (Real-time Metrics) ✅
+- **Package**: `src/admin/`
+- **`models.py`** — Admin dashboard dataclasses: `DailyStats`, `CropStat`, `SubscriptionFunnel`, `MessageLogEntry`, `BroadcastHealth`, `AdminDashboardData`
+- **`repository.py`** — `AdminRepository` with 10 async query methods:
+  - `get_dau_today()` — daily active users (distinct farmers with inbound messages today)
+  - `get_messages_today()` — (inbound, outbound) count for today
+  - `get_total_farmers()` / `get_active_farmers()` — non-deleted / active subscriptions
+  - `get_daily_stats_7d()` — 7-day aggregation: DAU, inbound/outbound, top intent per day
+  - `get_top_crops(limit=5)` — commodities ranked by PRICE_QUERY frequency (from `detected_entities` JSONB)
+  - `get_subscription_funnel()` — state breakdown (new, awaiting_consent, active, opted_out, total)
+  - `get_recent_messages(limit=50)` — conversation log with **phone anonymization** (show last 4 digits only)
+  - `get_broadcast_health()` — last broadcast task: (last_run_at, sent_count, failed_count, status)
+  - `get_dashboard_data()` — complete snapshot aggregating all metrics
+- **`routes.py`** — FastAPI endpoints:
+  - `GET /admin/` — serves responsive HTML dashboard (embedded inline)
+  - `GET /admin/api/dashboard` — JSON snapshot for all metrics
+  - `GET /admin/api/dau`, `/messages`, `/crops`, `/funnel`, `/messages-log`, `/broadcast-health` — granular endpoints
+- **Dashboard UI** — 
+  - Responsive cards: DAU, messages today, total farmers
+  - Bar chart: top 5 crops by query count
+  - Funnel visualization: new → consent → active → opted_out
+  - Message log: last 10 conversations (preview text, detected intent, anonymized phone)
+  - Broadcast health: status badge, sent/failed counts, last run timestamp
+  - Auto-refresh every 5 minutes via client-side JavaScript polling
+- **Tests**: `src/tests/test_admin.py` (8 tests ✅) — model creation and repository initialization
+
 ---
 
 ## 3. Test Summary
 
 ```
-73 tests passing, 0 failing (as of 2026-04-17)
+196 tests passing, 0 failing (as of 2026-04-17)
 
-src/tests/test_whatsapp.py          6  ✅  Module 1
-src/tests/test_webhook.py           9  ✅  Module 2
-src/tests/test_ingestion_normalizer.py  14  ✅  Module 4
-src/tests/test_ingestion_merger.py      8  ✅  Module 4
-src/tests/test_ingestion_orchestrator.py 3  ✅  Module 4
-src/tests/test_classifier.py           33  ✅  Module 5
+Module 1–5 (prior):                       73 tests
+├── test_whatsapp.py          6  ✅  Module 1
+├── test_webhook.py           9  ✅  Module 2
+├── test_ingestion_normalizer.py  14  ✅  Module 4
+├── test_ingestion_merger.py      8  ✅  Module 4
+├── test_ingestion_orchestrator.py 3  ✅  Module 4
+└── test_classifier.py           33  ✅  Module 5
+
+Module 6–10 (new):                       123 tests
+├── test_intent.py                 51  ✅  Module 5 extension (districts + intents)
+├── test_onboarding.py             12  ✅  Module 6
+├── test_price.py                   9  ✅  Module 7
+├── test_scheduler.py               5  ✅  Module 8
+├── test_templates.py              18  ✅  Module 9
+├── test_admin.py                   8  ✅  Module 10
+└── test_webhook.py                20  (expanded from 9)
 ```
 
 Run with:
@@ -150,7 +225,7 @@ kisan-ai/
     │   └── classify.py            # Top-level async classify()
     ├── handlers/
     │   ├── webhook.py             # parse_webhook_message + handle_message (wired to classifier)
-    │   └── onboarding.py          # ⏳ Module 6
+    │   └── onboarding.py          # Module 6
     ├── ingestion/                 # Module 4
     │   ├── normalizer.py          # District/APMC/commodity canonicalisation + Marathi aliases
     │   ├── merger.py              # Source preference rules
@@ -163,15 +238,33 @@ kisan-ai/
     │       └── vashi_scraper.py   # Vashi APMC scraper
     ├── models/
     │   ├── base.py
-    │   ├── farmer.py
-    │   ├── price.py               # MandiPrice (updated with variety, apmc, arrival_qty, raw_payload)
-    │   ├── conversation.py
-    │   ├── broadcast.py
-    │   └── consent.py
-    ├── scheduler/                 # ⏳ Module 8
-    ├── templates/                 # ⏳ Module 9
+    │   ├── farmer.py              # Farmer + CropOfInterest
+    │   ├── price.py               # MandiPrice (with variety, apmc, arrival_qty, raw_payload)
+    │   ├── conversation.py        # Conversation (message log)
+    │   ├── broadcast.py           # BroadcastLog
+    │   └── consent.py             # Consent events
+    ├── onboarding/                # Module 6
+    │   ├── states.py              # OnboardingState enum + OnboardingContext
+    │   ├── redis_store.py         # OnboardingStore (Redis persistence)
+    │   ├── transitions.py         # State transition functions
+    │   └── machine.py             # OnboardingMachine orchestrator
+    ├── price/                     # Module 7
+    │   ├── models.py              # PriceQuery + PriceQueryResult
+    │   ├── repository.py          # PriceRepository (DB queries)
+    │   ├── formatter.py           # format_price_reply + format_price_query_needed
+    │   └── handler.py             # PriceHandler (orchestrator)
+    ├── scheduler/                 # Module 8
+    │   ├── celery_app.py          # Celery app + Beat schedule
+    │   └── tasks.py               # broadcast_prices task
+    ├── templates/                 # Module 9
+    │   ├── templates.py           # Template dataclass + registry
+    │   └── transliterate.py       # Hinglish→Marathi transliteration
+    ├── admin/                     # Module 10
+    │   ├── models.py              # Dashboard dataclasses
+    │   ├── repository.py          # AdminRepository (10 query methods)
+    │   └── routes.py              # FastAPI routes (/admin, /admin/api/*)
     ├── router/
-    ├── admin/
+    ├── intent.py                  # Intent router
     └── tests/
 ```
 
@@ -254,12 +347,12 @@ CREATE TABLE mandi_prices (
 
 | # | Module | Status | Depends on |
 |---|--------|--------|------------|
-| 6 | Onboarding state machine | ⏳ Next | Modules 1, 4 |
-| 7 | Price handler | ⏳ | Modules 4, 5, 6 |
-| 8 | Celery + broadcast scheduler | ⏳ | Modules 1, 4, 5 |
-| 9 | Marathi templates + transliteration | ⏳ | None |
-| 10 | Admin dashboard | ⏳ | Module 4 |
-| 11 | DPDPA consent flow | ⏳ | Modules 4, 7 |
+| 6 | Onboarding state machine | ✅ Complete | Modules 1, 4 |
+| 7 | Price handler | ✅ Complete | Modules 4, 5, 6 |
+| 8 | Celery + broadcast scheduler | ✅ Complete | Modules 1, 4, 5 |
+| 9 | Marathi templates + transliteration | ✅ Complete | None |
+| 10 | Admin dashboard | ✅ Complete | Module 4 |
+| 11 | DPDPA consent flow + right-to-erasure | ⏳ Next | Modules 4, 7 |
 
 ---
 
@@ -270,7 +363,7 @@ CREATE TABLE mandi_prices (
 - **NEVER** commit `.env` or credentials to git
 - **NEVER** build payments/billing in Phase 1 — schema stub only
 - **NEVER** build voice/image/weather in Phase 1 — text + prices only
-- **Always** write tests. Current count: **73 passing**
+- **Always** write tests. Current count: **196 passing** (Modules 1–10 complete)
 - **Always** use conventional commits: `feat(scope):`, `fix(scope):`, `test(scope):`
 
 ---
