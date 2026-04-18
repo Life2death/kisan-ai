@@ -125,10 +125,10 @@ _PRICE_ALERT_RE = _p(
 # ── Government scheme query triggers (Phase 2 Module 4) ────────────────────
 _SCHEME_QUERY_RE = _p(
     # English
-    r"\bscheme\b", r"\beligible\b", r"\beligibility\b", r"\bsubsidy\b",
-    r"\bgrant\b", r"\baid\b", r"\bpmkisan\b", r"\bfasal\b",
-    r"\bgovernment\s+(scheme|support|aid)\b", r"\bwhat\s+schemes?\b",
-    r"\bwhat\s+(can\s+)?i\s+(get|avail)\b",
+    r"\bschemes?\b", r"\beligible\b", r"\beligibility\b", r"\bsubsid(?:y|ies)\b",
+    r"\bgrants?\b", r"\baids?\b", r"\bpmkisan\b", r"\bfasal\b",
+    r"\bgovernment\s+(?:scheme|support|aid)s?\b", r"\bwhat\s+schemes?\b",
+    r"\bwhat\s+(?:can\s+)?i\s+(?:get|avail)\b",
     # Marathi Devanagari
     r"योजना", r"अर्ह", r"अर्हता", r"सहायता", r"अनुदान",
     r"पीएम\s*किसान", r"केंद्र\s*सरकार", r"राज्य\s*सरकार",
@@ -140,15 +140,15 @@ _SCHEME_QUERY_RE = _p(
 # ── Pest/Disease diagnosis triggers (Phase 2 Module 3) ──────────────────────
 _PEST_QUERY_RE = _p(
     # English
-    r"\bpest\b", r"\bdisease\b", r"\bbug\b", r"\binfestation\b",
-    r"\bwhat.?s\s+(wrong|wrong)\b", r"\bmy\s+(plant|crop)\s+(is\s+)?sick\b",
+    r"\bpests?\b", r"\bdiseases?\b", r"\bbugs?\b", r"\binfestations?\b",
+    r"\bwhat.?s\s+(?:wrong|wrong)\b", r"\bmy\s+(?:plant|crop)s?\s+(?:is\s+)?sick\b",
     r"\bdiagnose\b", r"\bwhat.?s\s+this\b", r"\bidentify\b",
-    r"\bwhite\s+spots?\b", r"\byellow\s+leaves?\b", r"\bdark\s+spots?\b",
+    r"\b(?:white|yellow|dark)\s+(?:spots?|leaves?)\b", r"\byellow\b",
     # Marathi Devanagari
     r"कीट", r"रोग", r"संक्रमण", r"बोंड", r"झाल\w*\s+आहे",
     r"काय\s+समस्या", r"पाहून\s*द्या", r"दिसून\s*द्या",
     # Hinglish
-    r"\bpest\b", r"\bkeeta\b", r"\brog\b", r"\binfection\b",
+    r"\bpests?\b", r"\bkeeta\b", r"\brog\b", r"\binfections?\b",
 )
 
 # ── MSP alert triggers (Phase 2 Module 4 — minimum support price alerts) ────
@@ -244,6 +244,19 @@ def classify_regex(text: str) -> IntentResult:
             explanation="subscribe_pattern",
         )
 
+    # MSP alert (minimum support price alert) — check before PRICE_ALERT
+    # so "set alert for msp" matches MSP_ALERT, not PRICE_ALERT
+    if _MSP_ALERT_RE.search(t):
+        commodity = _extract_commodity(t)
+        return IntentResult(
+            intent=Intent.MSP_ALERT,
+            confidence=1.0,
+            commodity=commodity,
+            source="regex",
+            raw_text=text,
+            explanation="msp_alert_pattern",
+        )
+
     # Price alert (set alert for price condition)
     if _PRICE_ALERT_RE.search(t):
         commodity = _extract_commodity(t)
@@ -256,18 +269,6 @@ def classify_regex(text: str) -> IntentResult:
             source="regex",
             raw_text=text,
             explanation="price_alert_pattern",
-        )
-
-    # MSP alert (minimum support price alert)
-    if _MSP_ALERT_RE.search(t):
-        commodity = _extract_commodity(t)
-        return IntentResult(
-            intent=Intent.MSP_ALERT,
-            confidence=1.0,
-            commodity=commodity,
-            source="regex",
-            raw_text=text,
-            explanation="msp_alert_pattern",
         )
 
     # Government scheme query

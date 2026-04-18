@@ -1,5 +1,6 @@
 """Tests for farmer profile service."""
 import pytest
+import pytest_asyncio
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -9,13 +10,15 @@ from src.models.farmer import Farmer, CropOfInterest
 from src.services.farmer_service import FarmerService
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db_session():
     """Create in-memory SQLite database for testing."""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        # Only create Farmer and CropOfInterest tables (JSONB not supported by SQLite)
+        await conn.run_sync(Farmer.__table__.create, checkfirst=True)
+        await conn.run_sync(CropOfInterest.__table__.create, checkfirst=True)
 
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 

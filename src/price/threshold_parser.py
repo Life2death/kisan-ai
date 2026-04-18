@@ -113,10 +113,10 @@ def _extract_price_value(text: str) -> Optional[float]:
     # Pattern: optional currency symbol + optional whitespace + digits (with optional commas)
     # Matches: ₹5000, ₹5,000, Rs 5000, Rs5000, रु5000, just 5000, etc.
     patterns = [
-        r"₹\s*([0-9]{1,3}(?:,?[0-9]{3})*)",  # ₹ symbol
-        r"Rs\.?\s*([0-9]{1,3}(?:,?[0-9]{3})*)",  # Rs or Rs.
-        r"रु\.?\s*([0-9]{1,3}(?:,?[0-9]{3})*)",  # Marathi रु
-        r"(?:^|\s)([0-9]{1,3}(?:,?[0-9]{3})*)\s*(?:rupees?|रु|rs|inr)?(?:\s|$|/qt)",  # Bare number
+        r"₹\s*([0-9,]+(?:\.[0-9]{1,2})?)",  # ₹ symbol
+        r"Rs\.?\s*([0-9,]+(?:\.[0-9]{1,2})?)",  # Rs or Rs.
+        r"रु\.?\s*([0-9,]+(?:\.[0-9]{1,2})?)",  # Marathi रु
+        r"([0-9,]+(?:\.[0-9]{1,2})?)\s*(?:rupees?|रु|rs|inr)?(?:\s|$|/)",  # Bare number (any context)
     ]
 
     for pattern in patterns:

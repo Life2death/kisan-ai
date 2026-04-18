@@ -1,6 +1,5 @@
 """Merge government schemes from multiple sources with deduplication."""
 import logging
-from typing import dict
 
 from src.ingestion.schemes.sources.base import SchemeRecord
 
