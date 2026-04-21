@@ -13,15 +13,18 @@ logger = logging.getLogger(__name__)
 # Source preference order (higher index = higher priority, wins in ties)
 _SOURCE_ORDER = {
     "imd": 10,              # India Meteorological Department (official, authoritative)
+    "openmeteo": 8,         # Open-Meteo (free, reliable global coverage)
     "openweather": 5,       # OpenWeather (global, reliable fallback)
+    "agromonitoring": 3,    # AgroMonitoring (agriculture-focused)
 }
 
 # Metric-specific source preferences (can override global order)
 _METRIC_SOURCE_ORDER = {
-    "rainfall": ["imd", "openweather"],     # IMD more accurate for monsoons
-    "temperature": ["imd", "openweather"],
-    "humidity": ["openweather", "imd"],     # OpenWeather better for humidity
-    "wind_speed": ["imd", "openweather"],
+    "rainfall": ["imd", "openmeteo", "openweather"],     # IMD most accurate for monsoons
+    "temperature": ["imd", "openmeteo", "openweather"],
+    "humidity": ["openmeteo", "openweather", "imd"],     # Open-Meteo & OpenWeather better
+    "wind_speed": ["imd", "openmeteo", "openweather"],
+    "pressure": ["imd", "openmeteo", "openweather"],
 }
 
 
