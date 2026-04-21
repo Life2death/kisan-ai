@@ -1,18 +1,23 @@
 """Celery app config + task registry."""
+import os
 from celery import Celery
 from celery.schedules import crontab
 
 app = Celery("dhanyada")
 
+# Read Redis URL from environment, fallback to localhost for development
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
 # Load config from settings
 app.conf.update(
-    broker_url="redis://localhost:6379/0",
-    result_backend="redis://localhost:6379/0",
+    broker_url=redis_url,
+    result_backend=redis_url,
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
     timezone="Asia/Kolkata",
     enable_utc=True,
+    broker_connection_retry_on_startup=True,  # Fix deprecation warning
 )
 
 # Beat schedule
