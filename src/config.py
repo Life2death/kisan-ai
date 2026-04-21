@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     # LLM fallback
     gemini_api_key: str = ""
+    openrouter_api_key: str = ""
+    openrouter_model: str = "mistralai/mistral-7b-instruct"
     xai_api_key: str = ""
 
     # App
