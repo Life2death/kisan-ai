@@ -1,9 +1,7 @@
-"""OpenRouter LLM fallback classifier.
+"""OpenRouter LLM fallback classifier with model fallback chain.
 
-Called only when regex returns UNKNOWN. Uses OpenRouter API (OpenAI-compatible)
-so we can swap models freely. Defaults to mistralai/mistral-7b-instruct which
-is cheap (~$0.0001/query) and handles Marathi/Hinglish well enough for intent
-classification.
+Tries models in order: Meta Llama 3.1 8B -> Google Gemma 2 9B (free) -> Mistral 7B.
+Falls back to next model on any error. Returns UNKNOWN if all fail.
 """
 from __future__ import annotations
 
@@ -19,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = """You are an intent classifier for Kisan AI, a WhatsApp bot serving farmers in Maharashtra, India.
 
-You must classify incoming farmer messages into exactly one of these intents:
+Classify messages into exactly one intent:
 - price_query    : farmer wants today mandi price
 - subscribe      : farmer wants daily price broadcasts
 - unsubscribe    : farmer wants to stop broadcasts
@@ -50,6 +48,13 @@ _FEW_SHOT = [
      '{"intent":"onboarding","confidence":0.95,"commodity":null,"district":null,"explanation":"Hinglish registration request"}'),
 ]
 
+# Fallback chain: try in order, skip on error
+_MODEL_CHAIN = [
+    "meta-llama/llama-3.1-8b-instruct",
+    "google/gemma-2-9b-it:free",
+    "mistralai/mistral-7b-instruct",
+]
+
 
 def _build_messages(text: str) -> list[dict]:
     few_shot_text = "
@@ -57,12 +62,11 @@ def _build_messages(text: str) -> list[dict]:
         f'User: "{msg}"
 Assistant: {resp}' for msg, resp in _FEW_SHOT
     )
-    user_content = f"{few_shot_text}
-User: "{text}"
-Assistant:"
     return [
         {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user", "content": user_content},
+        {"role": "user", "content": f'{few_shot_text}
+User: "{text}"
+Assistant:'},
     ]
 
 
@@ -102,42 +106,56 @@ def _fallback(text: str, reason: str) -> IntentResult:
     )
 
 
+async def _try_model(client, api_key: str, model: str, text: str) -> IntentResult | None:
+    """Try a single model. Returns None on any error so caller can try next."""
+    try:
+        resp = await client.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "HTTP-Referer": "https://kisan-ai-production-6f73.up.railway.app",
+                "X-Title": "Kisan AI",
+            },
+            json={
+                "model": model,
+                "messages": _build_messages(text),
+                "temperature": 0.1,
+                "max_tokens": 128,
+            },
+        )
+        resp.raise_for_status()
+        raw = resp.json()["choices"][0]["message"]["content"]
+        result = _parse(raw, text)
+        logger.info("llm_classifier: model=%s intent=%s confidence=%.2f", model, result.intent.value, result.confidence)
+        return result
+    except Exception as exc:
+        logger.warning("llm_classifier: model=%s failed: %s", model, exc)
+        return None
+
+
 async def classify_llm(text: str) -> IntentResult:
-    """Classify text using OpenRouter. Returns UNKNOWN on any error."""
-    api_key = settings.openrouter_api_key if hasattr(settings, "openrouter_api_key") else ""
-    if not api_key:
-        # fallback to gemini key check for backwards compat
-        api_key = getattr(settings, "gemini_api_key", "")
+    """Classify text using OpenRouter with model fallback chain.
+
+    Tries: Meta Llama 3.1 8B -> Google Gemma 2 9B (free) -> Mistral 7B.
+    Returns UNKNOWN if all models fail or no API key configured.
+    """
+    api_key = getattr(settings, "openrouter_api_key", "") or getattr(settings, "gemini_api_key", "")
     if not api_key:
         logger.warning("llm_classifier: no API key configured")
         return _fallback(text, "no_api_key")
 
-    try:
-        import httpx
-        model = getattr(settings, "openrouter_model", "mistralai/mistral-7b-instruct")
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "HTTP-Referer": "https://kisan-ai-production-6f73.up.railway.app",
-                    "X-Title": "Kisan AI",
-                },
-                json={
-                    "model": model,
-                    "messages": _build_messages(text),
-                    "temperature": 0.1,
-                    "max_tokens": 128,
-                },
-            )
-            resp.raise_for_status()
-            raw = resp.json()["choices"][0]["message"]["content"]
-            result = _parse(raw, text)
-            logger.info(
-                "llm_classifier: intent=%s confidence=%.2f model=%s",
-                result.intent.value, result.confidence, model,
-            )
-            return result
-    except Exception as exc:
-        logger.error("llm_classifier: error: %s", exc)
-        return _fallback(text, f"api_error:{type(exc).__name__}")
+    # Use configured model as first in chain if explicitly set
+    configured_model = getattr(settings, "openrouter_model", "")
+    chain = _MODEL_CHAIN.copy()
+    if configured_model and configured_model not in chain:
+        chain.insert(0, configured_model)
+
+    import httpx
+    async with httpx.AsyncClient(timeout=15) as client:
+        for model in chain:
+            result = await _try_model(client, api_key, model, text)
+            if result is not None:
+                return result
+
+    logger.error("llm_classifier: all models in chain failed")
+    return _fallback(text, "all_models_failed")
