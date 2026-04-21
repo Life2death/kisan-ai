@@ -520,6 +520,38 @@ async def status():
     }
 
 
+
+
+# Test endpoint for weather ingestion
+@app.get("/test/weather-ingest")
+async def test_weather_ingest():
+    """Test endpoint: trigger weather ingestion now (for testing only)."""
+    from datetime import date
+    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+    from sqlalchemy.orm import sessionmaker
+    from src.ingestion.weather.orchestrator import run_ingestion
+    
+    try:
+        engine = create_async_engine(settings.database_url)
+        AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        
+        async with AsyncSessionLocal() as session:
+            summary = await run_ingestion(date.today(), session)
+            await engine.dispose()
+        
+        return {
+            "status": "success",
+            "date": str(date.today()),
+            "summary": summary
+        }
+    except Exception as e:
+        logger.error(f"Weather ingest test failed: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
