@@ -39,8 +39,7 @@ def upgrade() -> None:
         sa.Column(
             "media_url",
             sa.String(500),
-            nullable=True,
-            comment="Meta WhatsApp Cloud API media download URL (24-hour expiry) for audio/image/document files"
+            nullable=True
         ),
     )
 
@@ -50,8 +49,7 @@ def upgrade() -> None:
         sa.Column(
             "voice_transcription",
             sa.Text(),
-            nullable=True,
-            comment="Transcribed text from Speech-to-Text service (Google Cloud STT or Whisper). Empty if transcription failed."
+            nullable=True
         ),
     )
 
@@ -60,7 +58,6 @@ def upgrade() -> None:
         "idx_conversations_media_url",
         "conversations",
         ["media_url"],
-        comment="Fast lookup for media messages with URLs",
     )
 
     # Create index on voice_transcription for filtering transcribed messages
@@ -68,7 +65,6 @@ def upgrade() -> None:
         "idx_conversations_transcribed",
         "conversations",
         ["voice_transcription"],
-        comment="Fast filtering of transcribed voice messages",
     )
 
 
