@@ -60,7 +60,7 @@ def upgrade() -> None:
     op.create_table(
         'msp_alerts',
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('farmer_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('farmer_id', sa.Integer(), nullable=False),
         sa.Column('commodity', sa.String(100), nullable=False),  # "onion", "wheat", etc.
         sa.Column('alert_threshold', sa.Numeric(precision=10, scale=2), nullable=False),  # Alert when MSP >= this value
         sa.Column('triggered_at', sa.DateTime(timezone=True), nullable=True),  # Last time alert sent
