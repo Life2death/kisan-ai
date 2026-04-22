@@ -25,7 +25,7 @@ def upgrade() -> None:
     op.create_table(
         'price_alerts',
         sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('farmer_id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('farmer_id', sa.Integer(), nullable=False),
         sa.Column('commodity', sa.String(100), nullable=False),  # "onion", "wheat"
         sa.Column('district', sa.String(100), nullable=True),  # optional: specific mandi
         sa.Column('condition', sa.String(10), nullable=False, server_default='>'),  # ">", "<", "=="
