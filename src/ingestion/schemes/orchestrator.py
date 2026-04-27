@@ -104,6 +104,8 @@ class SchemeOrchestrator:
             else:
                 logger.info(f"✅ {source_name}: {len(records)} schemes")
                 sources_succeeded.append(source_name)
+                for record in records:
+                    record.source = source_name
                 all_records.extend(records)
 
         if not all_records:

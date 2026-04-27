@@ -8,9 +8,10 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from src.adapters.whatsapp import WhatsAppAdapter
+from src.adapters.whatsapp import WhatsAppAdapter, WhatsAppConfig
 from src.config import settings
 from src.models.farmer import Farmer
+from src.models.schemes import MSPAlert, GovernmentScheme
 from src.models.broadcast import BroadcastLog
 from src.models.conversation import Conversation
 from src.models.consent import ConsentEvent
@@ -605,9 +606,12 @@ async def _trigger_msp_alerts_async():
     try:
         async with async_session() as session:
             from src.scheme.formatter import format_msp_alert_triggered
-            from src.models.schemes import MSPAlert, GovernmentScheme
 
-            whatsapp = WhatsAppAdapter()
+            whatsapp = WhatsAppAdapter(WhatsAppConfig(
+                phone_id=settings.whatsapp_phone_id,
+                token=settings.whatsapp_token,
+                business_account_id=settings.whatsapp_app_id,
+            ))
 
             # Get all active MSP alerts
             stmt = select(MSPAlert).where(MSPAlert.is_active == True)

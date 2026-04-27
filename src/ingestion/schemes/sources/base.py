@@ -28,6 +28,7 @@ class SchemeRecord:
     district: Optional[str]        # District (None = all-India / nationwide)
     state: str                     # State code (e.g., "maharashtra")
     raw_payload: dict              # Full API response for audit trail
+    source: str = ""               # Set by orchestrator after fetch (e.g., "pmksy_api")
 
 
 class SchemeSource(ABC):
