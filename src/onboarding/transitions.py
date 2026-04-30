@@ -10,12 +10,12 @@ def to_awaiting_consent(ctx: OnboardingContext) -> tuple[OnboardingContext, str]
     ctx.state = OnboardingState.AWAITING_CONSENT
     reply = (
         "नमस्कार! महाराष्ट्र किसान AI मध्ये आपले स्वागत आहे. 🌾\n"
-        "आम्ही तुमचा फोन नंबर, नाव, जिल्हा आणि पीक माहिती साठवतो — फक्त बाजारभाव कळवण्यासाठी.\n"
+        "आम्ही तुमचा फोन नंबर, नाव, जिल्हा, तालुका, गाव आणि पीक माहिती साठवतो — फक्त बाजारभाव कळवण्यासाठी.\n"
         '"हो" पाठवा सहमती देण्यासाठी. "नाही" पाठवा नाकारण्यासाठी.\n'
-        '\n'
+        "कधीही STOP पाठवून सेवा थांबवा.\n\n"
         "Welcome to Maharashtra Kisan AI! 🌾\n"
-        "We store your phone, name, district, crops — only to send you market prices.\n"
-        'Send "YES" to agree. Send "NO" to decline.'
+        "We store your phone, name, district, taluka, village, and crop info — only to send market prices.\n"
+        'Send "YES" to agree or "NO" to decline.'
     )
     return ctx, reply
 
