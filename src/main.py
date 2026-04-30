@@ -430,6 +430,16 @@ async def receive_message(request: Request):
                                 await whatsapp.send_text_message(msg.from_phone, reply)
                                 logger.info(f"✅ Sent MSP alert confirmation to {msg.from_phone}")
 
+                    # On-demand daily brief
+                    elif intent_type == Intent.DAILY_BRIEF:
+                        from src.broadcasts.daily_brief import compose_daily_brief_marathi
+                        from datetime import date as _date
+
+                        brief_parts = compose_daily_brief_marathi(_date.today())
+                        for part in brief_parts:
+                            await whatsapp.send_text_message(msg.from_phone, part)
+                        logger.info(f"✅ Sent daily brief ({len(brief_parts)} parts) to {msg.from_phone}")
+
                     # Subscribe to daily broadcast
                     elif intent_type == Intent.SUBSCRIBE:
                         if not farmer:
@@ -462,13 +472,21 @@ async def receive_message(request: Request):
 
                     elif intent_type == Intent.HELP:
                         help_msg = (
-                            "📋 **उपलब्ध आदेश**:\n\n"
-                            "1️⃣ कांद्याचा भाव - आजचा किंमत जाणून घ्या\n"
-                            "2️⃣ योजना - सरकारी योजनांसाठी पात्रता तपासा\n"
-                            "3️⃣ अलर्ट सेट करा - किंमत पोहोचल्यावर सूचना घ्या\n"
-                            "4️⃣ हवामान - आजचे हवामान जाणून घ्या\n"
-                            "5️⃣ शुरू / बंद - दैनिक सूचना सक्षम/निष्क्रिय करा\n\n"
-                            "अधिक मदतीसाठी, कृपया 'मदत' लिहा."
+                            "📋 *उपलब्ध आदेश:*\n\n"
+                            "1️⃣ *माहिती* — आजचा संपूर्ण शेतकरी माहितीपत्र\n"
+                            "   (हवामान, मंडी भाव, रोग-कीड, सिंचन)\n"
+                            "2️⃣ *भाव* — आजचा मंडी भाव विचारा\n"
+                            "3️⃣ *हवामान* — आजचे हवामान जाणून घ्या\n"
+                            "4️⃣ *योजना* — सरकारी योजनांची पात्रता तपासा\n"
+                            "5️⃣ *अलर्ट* — किंमत सूचना सेट करा\n"
+                            "6️⃣ *सुरू / बंद* — दैनिक सूचना चालू/बंद करा\n\n"
+                            "——\n"
+                            "📋 *Available commands:*\n"
+                            "• *माहिती* / brief — today's full farmer brief\n"
+                            "• *भाव* / price — mandi rates\n"
+                            "• *हवामान* / weather — forecast\n"
+                            "• *योजना* / schemes — govt schemes\n"
+                            "• STOP — opt out"
                         )
                         await whatsapp.send_text_message(msg.from_phone, help_msg)
                         logger.info(f"✅ Sent help menu to {msg.from_phone}")

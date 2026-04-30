@@ -27,6 +27,28 @@ def _p(*patterns: str) -> re.Pattern:
     return re.compile("|".join(f"(?:{p})" for p in patterns), re.IGNORECASE | re.UNICODE)
 
 
+# ── Daily brief triggers ─────────────────────────────────────────────────
+# Matches "माहिती", "आजची माहिती", "brief", "daily brief", "update", "अपडेट"
+# Checked before price/weather so "आजची माहिती" doesn't fall through to price.
+_DAILY_BRIEF_RE = _p(
+    # Marathi — standalone "माहिती" or with qualifier
+    r"^\s*माहिती\s*$",
+    r"आजची\s*माहिती",
+    r"शेतकरी\s*माहिती",
+    r"माहिती\s*(दे|पाठव|पाठवा|सांग|द्या)",
+    r"माहितीपत्र",
+    r"पत्रक",
+    r"अपडेट",
+    # English / Hinglish
+    r"\bdaily[\s\-]?brief\b",
+    r"\bfarm[\s\-]?brief\b",
+    r"\btoday[''s]*\s+brief\b",
+    r"\btoday[''s]*\s+update\b",
+    r"\bsend\s+(brief|update|info)\b",
+    r"\bbrief(ing)?\b",
+    r"\baaj\s+ki\s+jaankari\b",
+)
+
 # ── Price query triggers ─────────────────────────────────────────────────
 _PRICE_RE = _p(
     # English
@@ -222,6 +244,17 @@ def classify_regex(text: str) -> IntentResult:
             source="regex",
             raw_text=text,
             explanation="empty_message",
+        )
+
+    # Daily brief — checked first because "माहिती पाठवा" contains पाठवा which
+    # would otherwise match subscribe before we get here.
+    if _DAILY_BRIEF_RE.search(t):
+        return IntentResult(
+            intent=Intent.DAILY_BRIEF,
+            confidence=1.0,
+            source="regex",
+            raw_text=text,
+            explanation="daily_brief_pattern",
         )
 
     # Unsubscribe/subscribe before price — a message like "दैनिक भाव पाठवा"

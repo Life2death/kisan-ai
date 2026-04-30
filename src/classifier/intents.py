@@ -33,6 +33,7 @@ class Intent(str, Enum):
     PEST_QUERY = "pest_query"  # Phase 2 Module 3: image-based pest diagnosis
     SCHEME_QUERY = "scheme_query"  # Phase 2 Module 4: eligible government schemes
     MSP_ALERT = "msp_alert"  # Phase 2 Module 4: MSP price alerts
+    DAILY_BRIEF = "daily_brief"  # On-demand farmer daily brief (weather+prices+advisory)
     SUBSCRIBE = "subscribe"
     UNSUBSCRIBE = "unsubscribe"
     ONBOARDING = "onboarding"
