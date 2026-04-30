@@ -44,6 +44,12 @@ app.conf.beat_schedule = {
         # 6:30 AM IST every day (runs 30 min after weather ingestion)
         "schedule": crontab(hour=6, minute=30),
     },
+    "broadcast-daily-brief": {
+        "task": "src.scheduler.tasks.broadcast_daily_brief",
+        # 7:00 AM IST every day — full Marathi farmer brief (weather, prices,
+        # disease watch, irrigation plan, action checklist) to all active farmers
+        "schedule": crontab(hour=7, minute=0),
+    },
     "trigger-farm-advisories-daily": {
         "task": "src.scheduler.tasks.trigger_farm_advisories",
         # 6:45 AM IST every day (after weather ingest at 6:00, before price broadcast)

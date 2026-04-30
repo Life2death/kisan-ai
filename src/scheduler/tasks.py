@@ -19,6 +19,7 @@ from src.price.models import PriceQuery
 from src.price.repository import PriceRepository
 from src.price.formatter import format_price_reply
 from src.scheduler.celery_app import app
+from src.broadcasts.daily_brief import compose_daily_brief_marathi
 
 logger = logging.getLogger(__name__)
 
@@ -929,6 +930,79 @@ async def _trigger_msp_alerts_async():
                 triggered_count, error_count,
             )
             return {"triggered": triggered_count, "errors": error_count}
+
+    finally:
+        await engine.dispose()
+
+
+@app.task(bind=True, max_retries=3)
+def broadcast_daily_brief(self):
+    """Send full Marathi farmer daily brief to every active farmer via WhatsApp.
+
+    Covers: 7-day weather, APMC mandi prices, disease/pest watch,
+    irrigation plan, and action checklist — all in Marathi.
+    Runs at 7:00 AM IST (after weather ingest at 6:00 AM).
+    """
+    import asyncio
+    return asyncio.run(_broadcast_daily_brief_async())
+
+
+async def _broadcast_daily_brief_async():
+    """Send the 4-part Marathi daily brief to all active farmers."""
+    logger.info("broadcast_daily_brief: starting")
+
+    engine = create_async_engine(settings.database_url)
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+    try:
+        async with async_session() as session:
+            stmt = select(Farmer).where(
+                Farmer.subscription_status == "active",
+                Farmer.onboarding_state == "active",
+                Farmer.deleted_at == None,
+                Farmer.erasure_requested_at == None,
+            )
+            result = await session.execute(stmt)
+            farmers = result.scalars().all()
+            logger.info("broadcast_daily_brief: found %d active farmers", len(farmers))
+
+            whatsapp = WhatsAppAdapter(WhatsAppConfig(
+                phone_id=settings.whatsapp_phone_id,
+                token=settings.whatsapp_token,
+                business_account_id=settings.whatsapp_app_id,
+            ))
+
+            brief_parts = compose_daily_brief_marathi(date.today())
+            sent_count = 0
+            error_count = 0
+
+            for farmer in farmers:
+                try:
+                    for part in brief_parts:
+                        await whatsapp.send_text_message(to=farmer.phone, text=part)
+
+                    log = BroadcastLog(
+                        farmer_id=farmer.id,
+                        template_id="daily_brief_marathi",
+                        status="sent",
+                        sent_at=datetime.now(timezone.utc),
+                    )
+                    session.add(log)
+                    await session.commit()
+                    sent_count += 1
+
+                except Exception as exc:
+                    logger.error(
+                        "broadcast_daily_brief: error for farmer=%s: %s",
+                        farmer.phone, exc,
+                    )
+                    error_count += 1
+
+            logger.info(
+                "broadcast_daily_brief: complete sent=%d errors=%d",
+                sent_count, error_count,
+            )
+            return {"sent": sent_count, "errors": error_count}
 
     finally:
         await engine.dispose()
