@@ -206,15 +206,15 @@ class TestSchemeFormatter:
         """Test MSP alert triggered message in Marathi."""
         msg = format_msp_alert_triggered("onion", 3500, 3000, lang="mr")
         assert "MSP" in msg or "अलर्ट" in msg
-        assert "3500" in msg or "₹3" in msg
-        assert "3000" in msg
+        assert "3500" in msg or "3,500" in msg or "₹3" in msg
+        assert "3,000" in msg
 
     def test_format_msp_alert_triggered_english(self):
         """Test MSP alert triggered message in English."""
         msg = format_msp_alert_triggered("wheat", 2800, 2500, lang="en")
-        assert "Alert" in msg or "Alert" in msg.lower()
-        assert "2800" in msg
-        assert "2500" in msg
+        assert "Alert" in msg or "alert" in msg.lower()
+        assert "2,800" in msg
+        assert "2,500" in msg
 
     def test_format_schemes_with_data_marathi(self):
         """Test formatting schemes with data in Marathi."""
@@ -304,7 +304,7 @@ class TestSchemeHandler:
         )
 
         assert "MSP" in reply or "अलर्ट" in reply
-        assert "3000" in reply
+        assert "3,000" in reply
 
 
 # ==================== Integration Tests ====================

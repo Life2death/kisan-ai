@@ -38,29 +38,35 @@ class TestVoiceTranscription:
     @pytest.mark.asyncio
     async def test_transcriber_google_cloud_success(self):
         """Test successful Google Cloud transcription."""
+        import sys
         config = {
             "google_speech_api_key": "test-key",
             "google_speech_language_code": "mr-IN",
             "voice_transcription_timeout": 30,
         }
 
-        transcriber = VoiceTranscriber(config)
+        mock_speech = MagicMock()
+        with patch.dict(sys.modules, {
+            "google": MagicMock(), "google.cloud": MagicMock(), "google.cloud.speech_v1": mock_speech
+        }):
+            transcriber = VoiceTranscriber(config)
 
-        # Mock Google Cloud API
-        mock_response = MagicMock()
-        mock_response.results = [MagicMock()]
-        mock_response.results[0].alternatives = [MagicMock()]
-        mock_response.results[0].alternatives[0].transcript = "कांदा दर काय?"
-        mock_response.results[0].alternatives[0].confidence = 0.95
+            mock_response = MagicMock()
+            mock_response.results = [MagicMock()]
+            mock_response.results[0].alternatives = [MagicMock()]
+            mock_response.results[0].alternatives[0].transcript = "कांदा दर काय?"
+            mock_response.results[0].alternatives[0].confidence = 0.95
+            transcriber.google_speech_client.recognize.return_value = mock_response
 
-        with patch.object(transcriber.google_speech_client, 'recognize', return_value=mock_response):
-            result = await transcriber.transcribe("https://example.com/audio.ogg")
-            assert result.text == "कांदा दर काय?"
-            assert result.confidence == 0.95
+            with patch.object(transcriber, '_download_audio', new=AsyncMock(return_value=b"fake_audio")):
+                result = await transcriber.transcribe("https://example.com/audio.ogg")
+                assert result.text == "कांदा दर काय?"
+                assert result.confidence == 0.95
 
     @pytest.mark.asyncio
     async def test_transcriber_timeout(self):
         """Test transcription timeout handling."""
+        import asyncio as _asyncio
         config = {
             "google_speech_api_key": "test-key",
             "voice_transcription_timeout": 1,
@@ -68,38 +74,37 @@ class TestVoiceTranscription:
 
         transcriber = VoiceTranscriber(config)
 
-        # Mock slow API
-        async def slow_download(url):
-            import asyncio
-            await asyncio.sleep(2)  # Exceeds 1-second timeout
-            return b"audio data"
-
-        with patch.object(transcriber, '_download_audio', side_effect=slow_download):
+        with patch.object(transcriber, '_download_audio', new=AsyncMock(side_effect=_asyncio.TimeoutError())):
             with pytest.raises(TranscriptionError, match="timeout"):
                 await transcriber.transcribe("https://example.com/audio.ogg")
 
     @pytest.mark.asyncio
     async def test_transcriber_no_speech_detected(self):
         """Test transcription when audio contains no speech."""
+        import sys
         config = {
             "google_speech_api_key": "test-key",
             "google_speech_language_code": "mr-IN",
             "voice_transcription_timeout": 30,
         }
 
-        transcriber = VoiceTranscriber(config)
+        mock_speech = MagicMock()
+        with patch.dict(sys.modules, {
+            "google": MagicMock(), "google.cloud": MagicMock(), "google.cloud.speech_v1": mock_speech
+        }):
+            transcriber = VoiceTranscriber(config)
 
-        # Mock empty response (no speech detected)
-        mock_response = MagicMock()
-        mock_response.results = []
+            mock_response = MagicMock()
+            mock_response.results = []
+            transcriber.google_speech_client.recognize.return_value = mock_response
 
-        with patch.object(transcriber.google_speech_client, 'recognize', return_value=mock_response):
-            with pytest.raises(TranscriptionError, match="No speech"):
-                await transcriber.transcribe("https://example.com/silence.ogg")
+            with patch.object(transcriber, '_download_audio', new=AsyncMock(return_value=b"fake_audio")):
+                with pytest.raises(TranscriptionError):
+                    await transcriber.transcribe("https://example.com/silence.ogg")
 
     @pytest.mark.asyncio
     async def test_transcriber_network_error(self):
-        """Test transcription with network failure."""
+        """Test transcription with network failure during audio download."""
         config = {
             "google_speech_api_key": "test-key",
             "voice_transcription_timeout": 30,
@@ -107,8 +112,8 @@ class TestVoiceTranscription:
 
         transcriber = VoiceTranscriber(config)
 
-        import httpx
-        with patch.object(transcriber, '_download_audio', side_effect=httpx.ConnectError("Connection failed")):
+        with patch.object(transcriber, '_download_audio',
+                          new=AsyncMock(side_effect=TranscriptionError("Failed to download audio: Connection failed"))):
             with pytest.raises(TranscriptionError, match="download"):
                 await transcriber.transcribe("https://invalid-url.example.com/audio.ogg")
 

@@ -65,12 +65,19 @@ class TestImageDownload:
     @pytest.mark.asyncio
     async def test_download_image_success(self, dummy_config, dummy_image_bytes):
         """Test successful image download from Meta URL."""
+        import httpx as _httpx
         diagnoser = ImageDiagnoser(dummy_config)
 
-        with patch("httpx.AsyncClient.get") as mock_get:
-            mock_response = AsyncMock()
+        with patch("src.diagnosis.processor.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+
+            mock_response = MagicMock()
             mock_response.content = dummy_image_bytes
-            mock_get.return_value.__aenter__.return_value = mock_response
+            mock_response.raise_for_status = MagicMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
 
             result = await diagnoser._download_image("https://example.com/image.jpg")
             assert result == dummy_image_bytes
@@ -78,11 +85,16 @@ class TestImageDownload:
 
     @pytest.mark.asyncio
     async def test_download_image_timeout(self, dummy_config):
-        """Test image download timeout."""
+        """Test image download timeout (httpx.ReadTimeout → DiagnosisError)."""
+        import httpx as _httpx
         diagnoser = ImageDiagnoser(dummy_config)
 
-        with patch("httpx.AsyncClient.get") as mock_get:
-            mock_get.side_effect = asyncio.TimeoutError()
+        with patch("src.diagnosis.processor.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(side_effect=_httpx.ReadTimeout("Request timed out"))
 
             with pytest.raises(DiagnosisError):
                 await diagnoser._download_image("https://example.com/image.jpg")
@@ -252,10 +264,16 @@ class TestDiagnosisFlow:
         diagnoser.tf_model = mock_model
         diagnoser._model_available = True
 
-        with patch("httpx.AsyncClient.get") as mock_get:
-            mock_response = AsyncMock()
-            mock_response.content = dummy_image_bytes
-            mock_get.return_value.__aenter__.return_value = mock_response
+        with patch("src.diagnosis.processor.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+
+            mock_http_response = MagicMock()
+            mock_http_response.content = dummy_image_bytes
+            mock_http_response.raise_for_status = MagicMock()
+            mock_client.get = AsyncMock(return_value=mock_http_response)
 
             result = await diagnoser.diagnose("https://example.com/image.jpg")
 
@@ -276,10 +294,16 @@ class TestDiagnosisFlow:
         mock_model.generate_content.return_value = mock_response
         diagnoser.genai.GenerativeModel.return_value = mock_model
 
-        with patch("httpx.AsyncClient.get") as mock_get:
-            mock_response_obj = AsyncMock()
-            mock_response_obj.content = dummy_image_bytes
-            mock_get.return_value.__aenter__.return_value = mock_response_obj
+        with patch("src.diagnosis.processor.httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value = mock_client
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+
+            mock_http_response = MagicMock()
+            mock_http_response.content = dummy_image_bytes
+            mock_http_response.raise_for_status = MagicMock()
+            mock_client.get = AsyncMock(return_value=mock_http_response)
 
             result = await diagnoser.diagnose("https://example.com/image.jpg")
 
