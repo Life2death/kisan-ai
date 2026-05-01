@@ -20,12 +20,27 @@ from typing import Optional
 from urllib.parse import urlencode
 import urllib.request
 
+import os
+
 from sqlalchemy import select, func, text as sql_text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from src.config import settings
 from src.models import Village
+
+# When running via `railway run` locally, DATABASE_URL may be an internal hostname
+# unreachable from outside Railway's network. Use DATABASE_PUBLIC_URL if available.
+def get_database_url() -> str:
+    public_url = os.environ.get("DATABASE_PUBLIC_URL") or os.environ.get("POSTGRES_URL")
+    if public_url:
+        # asyncpg needs postgresql+asyncpg:// scheme
+        url = public_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        logger.info("Using DATABASE_PUBLIC_URL for external connection")
+        return url
+    logger.info("Using DATABASE_URL from settings")
+    return settings.database_url
 
 logging.basicConfig(
     level=logging.INFO,
@@ -161,7 +176,7 @@ async def populate_database(villages_by_taluka: dict[str, list[str]]) -> dict:
     Returns:
         {"inserted": count, "updated": count, "failed": count}
     """
-    engine = create_async_engine(settings.database_url)
+    engine = create_async_engine(get_database_url())
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     stats = {"inserted": 0, "updated": 0, "failed": 0}
@@ -237,7 +252,7 @@ async def verify_population() -> dict:
     Returns:
         {"total": count, "by_taluka": {taluka: count, ...}}
     """
-    engine = create_async_engine(settings.database_url)
+    engine = create_async_engine(get_database_url())
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     try:
