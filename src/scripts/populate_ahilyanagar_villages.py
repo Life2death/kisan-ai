@@ -284,6 +284,10 @@ async def main():
     logger.info(f"   Updated: {stats['updated']}")
     logger.info(f"   Failed: {stats['failed']}")
 
+    # Wait for database to flush
+    logger.info("\n⏳ Waiting 10 seconds for database to flush...")
+    time.sleep(10)
+
     # Verify
     logger.info("\n🔍 Verification:")
     verification = await verify_population()
