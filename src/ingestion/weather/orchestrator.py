@@ -238,12 +238,12 @@ async def _upsert_records(session: AsyncSession, records: Sequence[WeatherRecord
 
 
 def _default_sources() -> list[WeatherSource]:
-    """Create default list of weather sources (AgroMonitoring > OpenWeather > IMD).
+    """Create default list of weather sources.
 
     Priority order:
-    1. AgroMonitoring (agriculture-focused, best for farms)
-    2. OpenWeather (fallback, general weather)
-    3. IMD (stub, awaiting integration)
+    1. OpenMeteo (free, no key, global coverage — always active)
+    2. AgroMonitoring (agriculture-focused, if key configured)
+    3. OpenWeather (fallback, if key configured)
 
     Returns:
         List of WeatherSource instances ready to use
@@ -252,20 +252,18 @@ def _default_sources() -> list[WeatherSource]:
 
     sources = []
 
-    # Primary: AgroMonitoring (agriculture-focused)
+    # Always-on: OpenMeteo (no API key required, free, global)
+    sources.append(OpenMeteoWeatherSource())
+    logger.info("_default_sources: Added OpenMeteo (free, no key required)")
+
+    # Optional: AgroMonitoring (agriculture-focused)
     if settings.agromonitoring_api_key:
         sources.append(AgroMonitoringSource(api_key=settings.agromonitoring_api_key))
         logger.info("_default_sources: Added AgroMonitoring (agriculture-focused)")
 
-    # Secondary: OpenWeather (fallback)
+    # Optional: OpenWeather
     if settings.openweather_api_key:
         sources.append(OpenWeatherSource(api_key=settings.openweather_api_key))
         logger.info("_default_sources: Added OpenWeather (fallback)")
-
-    # Tertiary: IMD (stub)
-    sources.append(IMDWeatherSource())
-
-    if not sources:
-        logger.warning("_default_sources: No weather API keys configured!")
 
     return sources

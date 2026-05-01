@@ -972,7 +972,7 @@ async def _broadcast_daily_brief_async():
                 business_account_id=settings.whatsapp_app_id,
             ))
 
-            brief_parts = compose_daily_brief_marathi(date.today())
+            brief_parts = await compose_daily_brief_marathi(date.today(), session)
             sent_count = 0
             error_count = 0
 

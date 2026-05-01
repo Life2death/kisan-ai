@@ -37,6 +37,8 @@ _TALUKA_COORDS = {
     "jamkhed": (18.9833, 74.8500),
     "karjat_a": (18.8000, 74.6500),
     "parner": (18.9500, 74.2667),
+    "goregaon_parner": (19.0916, 74.4742),
+    "wadegaon_parner": (18.5561, 74.0658),
     "pune": (18.5204, 73.8567),
     "nashik": (19.9975, 73.7898),
     "navi_mumbai": (19.0330, 73.0297),
@@ -280,6 +282,8 @@ class OpenMeteoWeatherSource(WeatherSource):
             "jamkhed": "ahilyanagar",
             "karjat_a": "ahilyanagar",
             "parner": "ahilyanagar",
+            "goregaon_parner": "ahilyanagar",
+            "wadegaon_parner": "ahilyanagar",
         }
         return district_map.get(taluka, taluka)
 

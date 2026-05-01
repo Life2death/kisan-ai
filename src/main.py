@@ -435,7 +435,7 @@ async def receive_message(request: Request):
                         from src.broadcasts.daily_brief import compose_daily_brief_marathi
                         from datetime import date as _date
 
-                        brief_parts = compose_daily_brief_marathi(_date.today())
+                        brief_parts = await compose_daily_brief_marathi(_date.today(), session)
                         for part in brief_parts:
                             await whatsapp.send_text_message(msg.from_phone, part)
                         logger.info(f"✅ Sent daily brief ({len(brief_parts)} parts) to {msg.from_phone}")
@@ -494,7 +494,7 @@ async def receive_message(request: Request):
                     elif intent_type == Intent.GREETING:
                         from src.broadcasts.daily_brief import compose_daily_brief_marathi
                         from datetime import date as _date
-                        brief_parts = compose_daily_brief_marathi(_date.today())
+                        brief_parts = await compose_daily_brief_marathi(_date.today(), session)
                         for part in brief_parts:
                             await whatsapp.send_text_message(msg.from_phone, part)
                         logger.info(f"✅ Sent 4-part daily brief on greeting to {msg.from_phone}")
