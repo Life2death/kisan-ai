@@ -73,12 +73,13 @@ app.conf.beat_schedule = {
         # 1:00 AM IST every day (= 00:30 UTC; Celery uses UTC)
         "schedule": crontab(hour=19, minute=30),  # 1:00 AM IST = 19:30 UTC previous day
     },
-    "refresh-village-data-hourly": {
-        "task": "src.scheduler.tasks.refresh_village_data",
-        # Every hour at :00 — one taluka per run, 14 h for a full Ahilyanagar sweep,
-        # then 30-day cooldown before the next cycle.
-        "schedule": crontab(minute=0),
-    },
+    # "refresh-village-data-hourly": {
+    #     "task": "src.scheduler.tasks.refresh_village_data",
+    #     # Every hour at :00 — one taluka per run, 14 h for a full Ahilyanagar sweep,
+    #     # then 30-day cooldown before the next cycle.
+    #     # DISABLED: Using one-time Wikidata population script instead (populate_ahilyanagar_villages.py)
+    #     "schedule": crontab(minute=0),
+    # },
 }
 
 # Import tasks so they're registered
