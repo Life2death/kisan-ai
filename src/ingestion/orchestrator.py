@@ -31,6 +31,7 @@ from src.ingestion.merger import pick_winners
 from src.ingestion.sources.agmarknet_api import AgmarknetApiSource
 from src.ingestion.sources.agmarknet_v2_api import AgmarknetV2Source
 from src.ingestion.sources.base import PriceRecord, PriceSource
+from src.ingestion.sources.enam_scraper import ENamScraperSource
 from src.ingestion.sources.msamb_scraper import MsambScraperSource
 from src.ingestion.sources.nhrdf_scraper import NhrdfOnionSource
 from src.ingestion.sources.vashi_scraper import VashiApmcSource
@@ -64,6 +65,7 @@ def _default_sources() -> list[PriceSource]:
     return [
         AgmarknetV2Source(),       # Primary: live api.agmarknet.gov.in/v1/ (no key, real-time)
         AgmarknetApiSource(),      # Fallback: data.gov.in (key required, 10-day lag)
+        ENamScraperSource(),       # Supplementary: eNAM 118 MH APMCs (intermittently broken)
         MsambScraperSource(),
         NhrdfOnionSource(),
         VashiApmcSource(),
