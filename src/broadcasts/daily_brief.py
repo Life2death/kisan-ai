@@ -250,9 +250,8 @@ def _build_price_part(brief_date: date, rows: list[MandiPrice]) -> str:
             high  = f"₹{int(p.max_price)}"    if p.max_price   else "—"
             alert = " ⚠️" if slug == "onion" and p.modal_price and p.modal_price < 1000 else ""
             lines.append(f"{marathi_label:10s}: {low} | {modal} | {high}{alert}")
-
-    if len(lines) == 1:
-        lines.append("(आजचे भाव नोंदणी झाली नाही — उद्या पुन्हा पाहा)")
+        else:
+            lines.append(f"{marathi_label:10s}: — | — | —")
 
     # Group crops by their source district + mandi for attribution
     # district_slug → (Marathi district name, mandi display name, [Marathi crop labels])
