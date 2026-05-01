@@ -492,9 +492,12 @@ async def receive_message(request: Request):
                         logger.info(f"✅ Sent help menu to {msg.from_phone}")
 
                     elif intent_type == Intent.GREETING:
-                        reply = "नमस्ते! 👋 कृपया मला काय करायचे आहे हे सांगा:\n\n• कांद्याचा भाव?\n• योजना?\n• अलर्ट सेट करा?"
-                        await whatsapp.send_text_message(msg.from_phone, reply)
-                        logger.info(f"✅ Sent greeting to {msg.from_phone}")
+                        from src.broadcasts.daily_brief import compose_daily_brief_marathi
+                        from datetime import date as _date
+                        brief_parts = compose_daily_brief_marathi(_date.today())
+                        for part in brief_parts:
+                            await whatsapp.send_text_message(msg.from_phone, part)
+                        logger.info(f"✅ Sent 4-part daily brief on greeting to {msg.from_phone}")
 
                     elif intent_type == Intent.FEEDBACK:
                         # Log feedback to database if farmer exists
