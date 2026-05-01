@@ -5,7 +5,8 @@
       "Bash(python -c \"import json; f=open\\('.claude/settings.json'\\); d=json.load\\(f\\); print\\('JSON valid'\\); print\\('Stop hook:', d['hooks']['Stop'][0]['hooks'][0]['command']\\)\")",
       "Bash(python *)",
       "Bash(git cherry-pick *)",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Bash(DATABASE_PUBLIC_URL=\"postgresql://postgres:jmjLUFeyaEGkkwRPAKbexQMpivDgzMHk@shinkansen.proxy.rlwy.net:26158/railway\" python -m src.scripts.populate_ahilyanagar_villages)"
     ]
   }
 }
