@@ -29,7 +29,7 @@ def upgrade() -> None:
     op.execute(f"""
         UPDATE farmers SET
             village_confirmation_count = 0,
-            village_locked = FALSE,
+            village_locked = 0,
             village_confirmed_at = NULL
         WHERE district IN ({', '.join([f"'{d}'" for d in MH_DISTRICTS])})
         AND deleted_at IS NULL

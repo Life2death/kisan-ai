@@ -24,7 +24,7 @@ def upgrade() -> None:
 
     # Drop the server defaults after adding columns (so they're just for initial population)
     op.alter_column('farmers', 'village_confirmation_count', server_default=None)
-    op.alter_column('farmers', 'village_locked', server_default=None)
+    op.alter_column('farmers', 'village_locked', server_default=None, existing_type=sa.Boolean())
 
 
 def downgrade() -> None:
