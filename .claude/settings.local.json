@@ -15,7 +15,14 @@
       "Bash(cat)",
       "Read(//c/Learning/kisan-ai/**)",
       "Bash(railway shell *)",
-      "Bash(railway logs *)"
+      "Bash(railway logs *)",
+      "Bash(curl -s -X POST https://kisan-ai-production-6f73.up.railway.app/admin/login -H 'Content-Type: application/x-www-form-urlencoded' -d 'username=admin&password=changeme')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -X POST https://kisan-ai-production-6f73.up.railway.app/admin/advisory/api/run-now -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXBlIjoiYWRtaW4iLCJ1c2VybmFtZSI6ImFkbWluIiwiZXhwIjoxNzc3NzAzMTg1LCJpYXQiOjE3Nzc2OTk1ODV9.upm8oqeLefHJHUEeQeOQNta62XpmR0_QC2oAdiEVuQY' -H 'Content-Type: application/json')",
+      "Bash(curl -s -X GET \"https://kisan-ai-production-6f73.up.railway.app/test/price-ingest\")",
+      "Bash(curl -s -X GET \"https://kisan-ai-production-6f73.up.railway.app/test/price-data?date=2026-05-02\")",
+      "Bash(curl -s \"https://kisan-ai-production-6f73.up.railway.app/test/price-data\")",
+      "Bash(python3 -c \"import sys, json; data = json.load\\(sys.stdin\\); print\\(f\\\\\"Total crops in database: {data['total_crops']}\\\\\"\\); print\\('Latest date ranges:'\\); [print\\(f\\\\\"  {c['crop']}: {c['latest']}\\\\\"\\) for c in data['crop_summary'][:5]]\")"
     ]
   }
 }
