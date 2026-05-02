@@ -13,7 +13,9 @@
       "Bash(xargs grep *)",
       "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost/kisan_ai\" alembic current)",
       "Bash(cat)",
-      "Read(//c/Learning/kisan-ai/**)"
+      "Read(//c/Learning/kisan-ai/**)",
+      "Bash(railway shell *)",
+      "Bash(railway logs *)"
     ]
   }
 }
