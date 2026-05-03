@@ -23,7 +23,8 @@
       "Bash(curl -s -X GET \"https://kisan-ai-production-6f73.up.railway.app/test/price-data?date=2026-05-02\")",
       "Bash(curl -s \"https://kisan-ai-production-6f73.up.railway.app/test/price-data\")",
       "Bash(python3 -c \"import sys, json; data = json.load\\(sys.stdin\\); print\\(f\\\\\"Total crops in database: {data['total_crops']}\\\\\"\\); print\\('Latest date ranges:'\\); [print\\(f\\\\\"  {c['crop']}: {c['latest']}\\\\\"\\) for c in data['crop_summary'][:5]]\")",
-      "Bash(curl -s \"https://kisan-ai-production-6f73.up.railway.app/test/weather-data?district=ahmednagar\")"
+      "Bash(curl -s \"https://kisan-ai-production-6f73.up.railway.app/test/weather-data?district=ahmednagar\")",
+      "Read(//tmp/**)"
     ]
   }
 }
